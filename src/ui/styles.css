@@ -1,25 +1,27 @@
-/* Bot Crossing — HUD.
+/* SOUK - HUD.
    Everything here is chrome that can be dismissed with H. The only thing that survives is
    in the 3D scene itself, so nothing in this file may ever be load-bearing for reading the
-   colony's state. */
+   souk's state. */
 
 :root {
-  --bg: #0a0b0f;
-  --panel: rgba(16, 17, 22, 0.82);
-  --panel-solid: #14151b;
-  --line: rgba(255, 255, 255, 0.09);
-  --line-strong: rgba(255, 255, 255, 0.16);
-  --text: #f2f0ec;
-  --muted: #9b9aa3;
-  --dim: #6f6e78;
-  --accent: #c96442;
-  --green: #4f9a63;
-  --blue: #4f7ec9;
-  --amber: #c9a24f;
-  --red: #c94f4f;
-  --teal: #2fd4c4;
-  --radius: 14px;
-  --shadow: 0 12px 40px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.4);
+  --bg: #141a3a;
+  --panel: rgba(20, 26, 58, 0.88);
+  --panel-solid: #1a2148;
+  --line: rgba(244, 241, 234, 0.12);
+  --line-strong: rgba(244, 241, 234, 0.22);
+  --text: #f4f1ea;
+  --muted: #b9bdd0;
+  --dim: #8a90ab;
+  --accent: #2f78c8;
+  --green: #6b9a4a;
+  --blue: #5b9be0;
+  --amber: #d99a58;
+  --red: #d2584f;
+  --teal: #e0a060;
+  --radius: 4px;
+  --shadow: 0 10px 30px rgba(10, 14, 38, 0.45), 0 2px 6px rgba(10, 14, 38, 0.3);
+  --font-display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
+  --font-body: 'IBM Plex Sans', 'Segoe UI', sans-serif;
   color-scheme: dark;
 }
 
@@ -38,7 +40,7 @@ body,
 }
 
 body {
-  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-body);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   user-select: none;
@@ -47,8 +49,8 @@ body {
 .bot-crossing-canvas {
   position: absolute;
   inset: 0;
-  /* A canvas is a replaced element: with `inset: 0` alone its *intrinsic* size — the
-     drawing buffer, which is twice the window on a retina panel — decides how big the
+  /* A canvas is a replaced element: with `inset: 0` alone its *intrinsic* size - the
+     drawing buffer, which is twice the window on a retina panel - decides how big the
      element is, and `right: 0` is dropped as over-constrained. Stating the size here is
      what keeps the scene's rectangle and the HUD's rectangle the same rectangle, without
      any JavaScript holding a second opinion about it. */
@@ -69,7 +71,7 @@ body {
   pointer-events: none;
   /* Panels wait their turn parked past the right-hand edge, which makes this layer's
      scroll width some 330px wider than the window. Nothing here ever scrolls, so that
-     phantom width is invisible in a plain browser — but a host that sizes its view to the
+     phantom width is invisible in a plain browser - but a host that sizes its view to the
      content rather than to the window lays the page out that much too wide and leaves a
      dead strip of background beside it. Clipping here costs nothing: a panel still slides
      in from the edge, it simply stops existing beyond it. */
@@ -86,7 +88,7 @@ body {
 
    Once faded, the panels are made *invisible*, not just transparent. A panel with a
    backdrop blur stays a composited layer at opacity 0, and Chromium redraws those over a
-   live canvas every frame — which, when the camera moves, shows up as large black
+   live canvas every frame - which, when the camera moves, shows up as large black
    rectangles flickering where the sidebar and settings would be. `visibility: hidden`
    takes them out of compositing entirely; its transition is delayed so the fade still
    plays, and on the way back it is immediate so the fade-in has something to fade. */
@@ -126,7 +128,7 @@ body {
   height: 34px;
   min-width: 34px;
   padding: 0 11px;
-  border-radius: 10px;
+  border-radius: 3px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.05);
   color: var(--text);
@@ -159,7 +161,7 @@ body {
 }
 
 .btn.primary:hover {
-  background: #d97553;
+  background: #4a8fdc;
 }
 
 .btn.ghost {
@@ -167,9 +169,9 @@ body {
 }
 
 .btn[aria-pressed='true'] {
-  background: rgba(201, 100, 66, 0.22);
-  border-color: rgba(201, 100, 66, 0.55);
-  color: #ffb193;
+  background: rgba(47, 120, 200, 0.22);
+  border-color: rgba(47, 120, 200, 0.55);
+  color: #f4c9a0;
 }
 
 .btn svg {
@@ -261,7 +263,7 @@ body {
 
 .settings .body::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.14);
-  border-radius: 8px;
+  border-radius: 3px;
 }
 
 .group {
@@ -316,7 +318,7 @@ body {
   position: relative;
   width: 42px;
   height: 24px;
-  border-radius: 999px;
+  border-radius: 3px;
   border: none;
   background: rgba(255, 255, 255, 0.14);
   cursor: pointer;
@@ -351,7 +353,7 @@ body {
   appearance: none;
   height: 30px;
   padding: 0 28px 0 11px;
-  border-radius: 9px;
+  border-radius: 3px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.06)
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239b9aa3' stroke-width='1.6'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E")
@@ -429,7 +431,7 @@ body {
   flex: 1 1 auto;
   height: 30px;
   padding: 0 10px;
-  border-radius: 9px;
+  border-radius: 3px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.05);
   color: var(--muted);
@@ -446,9 +448,9 @@ body {
 }
 
 .chip[aria-pressed='true'] {
-  background: rgba(47, 212, 196, 0.16);
-  border-color: rgba(47, 212, 196, 0.5);
-  color: #7fe8dd;
+  background: rgba(224, 160, 96, 0.16);
+  border-color: rgba(224, 160, 96, 0.5);
+  color: #f0c090;
   font-weight: 600;
 }
 
@@ -464,7 +466,7 @@ body {
   align-items: center;
   gap: 7px;
   padding: 11px 4px 9px;
-  border-radius: 12px;
+  border-radius: 3px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.04);
   color: var(--muted);
@@ -481,7 +483,7 @@ body {
 
 .planet[aria-pressed='true'] {
   border-color: var(--teal);
-  background: rgba(47, 212, 196, 0.12);
+  background: rgba(224, 160, 96, 0.12);
   color: var(--text);
   font-weight: 600;
 }
@@ -545,7 +547,7 @@ body {
 .thread-pop .avatar {
   width: 46px;
   height: 46px;
-  border-radius: 12px;
+  border-radius: 3px;
   flex: none;
   display: grid;
   place-items: center;
@@ -594,7 +596,7 @@ body {
   align-items: center;
   gap: 5px;
   padding: 2px 7px;
-  border-radius: 6px;
+  border-radius: 3px;
   background: rgba(255, 255, 255, 0.07);
   font-size: 10.5px;
   white-space: nowrap;
@@ -726,7 +728,7 @@ body {
   gap: 6px;
   height: 27px;
   padding: 0 9px;
-  border-radius: 999px;
+  border-radius: 3px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--line);
   color: inherit;
@@ -768,7 +770,7 @@ body {
   color: #7fd39a;
 }
 .stat.waiting {
-  color: #8fb4ee;
+  color: #9cc4f2;
 }
 .stat.blocked {
   color: #e88b8b;
@@ -797,7 +799,7 @@ body {
   flex-direction: column;
 }
 
-/* Drilling in swaps the pane rather than stacking one on the other — at 320px across,
+/* Drilling in swaps the pane rather than stacking one on the other - at 320px across,
    two scrolling lists at once is two half-lists. */
 .side .project-detail {
   display: none;
@@ -911,7 +913,7 @@ body {
   gap: 9px;
   padding: 9px 10px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 3px;
   background: transparent;
   color: var(--text);
   font: inherit;
@@ -1081,7 +1083,7 @@ body {
 .side .projects::-webkit-scrollbar-thumb,
 .side .threads::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.14);
-  border-radius: 8px;
+  border-radius: 3px;
 }
 
 .side .thread {
@@ -1091,7 +1093,7 @@ body {
   gap: 4px 8px;
   padding: 8px 9px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 3px;
   background: transparent;
   color: var(--text);
   font: inherit;
@@ -1146,7 +1148,7 @@ body {
   color: #7fd39a;
 }
 .side .thread.waiting {
-  color: #8fb4ee;
+  color: #9cc4f2;
 }
 .side .thread.blocked {
   color: #e88b8b;
@@ -1172,7 +1174,7 @@ body {
 
 .toast {
   padding: 9px 13px;
-  border-radius: 10px;
+  border-radius: 3px;
   font-size: 12.5px;
   max-width: 320px;
   animation: toast-in 260ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -1230,7 +1232,7 @@ body {
   inset: 0;
   display: none;
   place-items: center;
-  background: rgba(6, 7, 11, 0.72);
+  background: rgba(14, 18, 44, 0.78);
   backdrop-filter: blur(6px);
   pointer-events: auto;
 }
@@ -1280,7 +1282,7 @@ kbd {
   display: inline-block;
   min-width: 20px;
   padding: 2px 6px;
-  border-radius: 5px;
+  border-radius: 3px;
   border: 1px solid var(--line-strong);
   background: rgba(255, 255, 255, 0.07);
   font: inherit;
@@ -1302,7 +1304,7 @@ kbd {
 .help .legend-row .badge {
   width: 20px;
   height: 20px;
-  border-radius: 6px;
+  border-radius: 3px;
   display: grid;
   place-items: center;
   font-size: 11px;
@@ -1454,7 +1456,7 @@ kbd {
     height: min(64vh, 560px);
     max-height: calc(100% - 70px - var(--safe-t));
     transform: translateY(calc(100% - var(--peek)));
-    border-radius: 18px;
+    border-radius: 3px;
   }
   .side.open {
     transform: translateY(0);
@@ -1488,7 +1490,7 @@ kbd {
     right: var(--edge);
     bottom: calc(var(--edge) + var(--safe-b));
     width: auto;
-    border-radius: 18px;
+    border-radius: 3px;
   }
   .settings.closed {
     transform: translateY(calc(100% + 40px));
@@ -1569,3 +1571,20 @@ kbd {
   }
 }
 .bot-crossing-canvas { cursor: grab; }
+
+/* ── medina type ─────────────────────────────────────────────────────────────────── */
+
+.brand,
+.help .sheet h2,
+.boot h1,
+h1,
+h2 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}

@@ -6,7 +6,7 @@
  * of keys that moved, so the renderer can rebuild only what actually needs rebuilding.
  */
 
-const STORE_KEY = 'botcrossing.settings.v1'
+const STORE_KEY = 'souk.settings.v1'
 
 /**
  * What a fresh install opens on. Fixed rather than guessed from the device: `autoQuality`
@@ -147,7 +147,7 @@ const DEFAULTS = {
   ...PRESETS.balanced.values,
 
   // World
-  planet: 'moon',
+  planet: 'medina',
   /**
    * Fold away repos where every thread has been quiet for three days. On by default: with
    * several harnesses read at once the map otherwise fills with every checkout you have ever

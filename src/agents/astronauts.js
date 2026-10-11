@@ -1,13 +1,12 @@
-import { reflectionUniforms, withLocalReflections } from '../world/reflections.js'
+import { reflectionUniforms } from '../world/reflections.js'
 import * as THREE from 'three'
-import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
-import { buildFaceAtlas, FACE, FACE_LOOPS, FRAME_COLS, FRAME_ROWS } from './faces.js'
+import { FACE, FACE_LOOPS } from './faces.js'
 import { animateFace } from './face-animation.js'
 import { attachMatrixAt, decorateSkinned, frameFor } from './crew.js'
 import { bendPoint, withCurve } from '../core/curve.js'
 import { Props, CHECK_LEN, CHECK_EVERY, pickProp } from './props.js'
 import { projectHitPoint, bodyHitDistance } from './picking.js'
-import { helmetGeometry, visorGeometry, screenGeometry } from './model.js'
+import { chechiaGeometry, faceGeometry, hammerGeometry, ROBE_TONES } from './attire.js'
 
 /**
  * Every astronaut in the colony, batched into a fixed set of instanced draw calls.
@@ -32,7 +31,7 @@ import { helmetGeometry, visorGeometry, screenGeometry } from './model.js'
  * character, including moving hands and feet.
  */
 
-const SUIT_TONES = [0xf3f1ec, 0xe8e4dc, 0xf7f4ee, 0xdfe4e8, 0xf1e9df]
+const SUIT_TONES = ROBE_TONES
 
 /** Trim + eye colour per behaviour. Eyes are pushed past 1.0 so the bloom pass catches them. */
 const AGENT_LOOK = {
@@ -110,7 +109,8 @@ const CREW_SCALE = 0.56
  */
 const P = {
   helmetR: 0.48,
-  headUp: 0.40, // the head bone sits at the neck; the helmet centres above it
+  headUp: 0, // chechia and face are authored relative to the head bone already
+  headCentre: 0.6, // middle of the (big) mannequin head above the neck bone, for picking and badges
   packZ: -0.3,
   packUp: 0.06,
   // The antenna stands on the crown of the helmet rather than out of its side, so it reads
@@ -135,7 +135,7 @@ const P = {
 // Rig-space radii cover the helmet, torso, gloves and boots. Capsules between these
 // landmarks follow the pose without CPU-skinning or raycasting every body vertex.
 const PICK_PARTS = [
-  { bone: 'head', radius: P.helmetR, y: P.headUp },
+  { bone: 'head', radius: 0.52, y: P.headCentre },
   { bone: 'chest', radius: 0.4 },
   { bone: 'hand.r', radius: 0.23 },
   { bone: 'hand.l', radius: 0.23 },
@@ -155,7 +155,6 @@ export class Astronauts {
     scene.add(this.group)
 
     this.reflectionUniforms = reflectionUniforms()
-    this.faceTexture = buildFaceAtlas(Math.min(settings.textureSize * 2, 1024))
     this._buildMeshes(Math.max(64, settings.get('maxAgents')))
 
     // Reusable scratch — allocating inside the frame loop is what makes GC hitch.
@@ -199,41 +198,15 @@ export class Astronauts {
     // rig is ever scaled again.
     const R = P.helmetR
 
-    // Helmet shell.
-    const helmetGeo = helmetGeometry(R)
-    parts.helmet = this._mesh(helmetGeo, suit(0.34, { vertexColors: true, metalness: 0.03, envMapIntensity: 0.9 }), capacity, false)
+    // The chechia (kept under the `helmet` key: it is the part that sits on the head) and the
+    // face. Both are vertex-coloured, so neither needs per-instance tinting. The face lives
+    // under `visor`, which the reflection pass also reads as the head's position.
+    parts.helmet = this._mesh(chechiaGeometry(), suit(0.9, { vertexColors: true, metalness: 0 }), capacity, false)
+    parts.visor = this._mesh(faceGeometry(), suit(0.7, { vertexColors: true, metalness: 0 }), capacity, false)
 
-    // A clear protective window over a real opening. The opaque screen sits behind it;
-    // the shell's inner wall naturally occludes the display as the viewing angle changes.
-    const visorGeo = visorGeometry(R)
-    parts.visor = this._mesh(visorGeo, this._visorMaterial(), capacity, false)
-
-    const packGeo = roundedBox(R * 0.89, R * 0.98, R * 0.55, R * 0.19)
-    parts.pack = this._mesh(packGeo, suit(0.66), capacity, true)
-
-    const antennaHeight = R * 0.57
-    const antGeo = new THREE.CylinderGeometry(R * 0.035, R * 0.046, antennaHeight, 8)
-    antGeo.translate(0, antennaHeight / 2, 0)
-    parts.antenna = this._mesh(antGeo, suit(0.34, { metalness: 0.03 }), capacity, false)
-
-    // The blinking bits: antenna tip and chest lamp. Unlit and pushed past 1.0 so they
-    // are the things the bloom pass picks out at night.
-    const glowMat = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: true })
-    const tipGeo = new THREE.SphereGeometry(R * 0.105, 12, 8)
-    // Author the light at the shaft endpoint and use the shaft's exact transform.
-    // Independent XYZ offsets drift off centre when the antenna leans or animates.
-    tipGeo.translate(0, antennaHeight, 0)
-    parts.tip = this._mesh(tipGeo, glowMat, capacity, false)
-    parts.lamp = this._mesh(new THREE.SphereGeometry(R * 0.16, 6, 5), glowMat.clone(), capacity, false)
-
-    // The hammer, held in the right hand while a thread is running. Wood and steel rather
-    // than suit white, so it reads as a tool at the distance the colony is watched from.
-    parts.hammer = this._mesh(hammerGeometry(R), suit(0.62, { vertexColors: true }), capacity, true)
-
-    // The shallow curved CRT sits inside the helmet, separated from the glass by air.
-    const faceGeo = screenGeometry(R)
-    parts.face = this._mesh(faceGeo, this._faceMaterial(), capacity, false)
-    this._attachFrameAttribute(parts.face, capacity)
+    // The coppersmith's hammer, held in the right hand while a thread is running. A copper
+    // head on a wooden handle, so it reads as a tool at the distance the colony is watched from.
+    parts.hammer = this._mesh(hammerGeometry(), suit(0.45, { vertexColors: true, metalness: 0.35 }), capacity, true)
 
     for (const mesh of Object.values(parts)) {
       mesh.frustumCulled = false // one bounding volume for every agent everywhere is useless
@@ -278,7 +251,7 @@ export class Astronauts {
     }
 
     const material = decorateSkinned(
-      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.68, metalness: 0.04 }),
+      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.78, metalness: 0, vertexColors: true }),
       this.crewUniforms
     )
 
@@ -313,7 +286,7 @@ export class Astronauts {
     // Resting helmet height for badges and camera framing. Reading it from the rig keeps
     // these anchors in step with CREW_SCALE; picking follows the animated bones below.
     const restHeadY = rig.attach[(this.headSlot + 0) * 16 + 13]
-    this.headHeight = (restHeadY + P.headUp) * CREW_SCALE
+    this.headHeight = (restHeadY + P.headCentre) * CREW_SCALE
   }
 
   _disposeCrew() {
@@ -338,100 +311,10 @@ export class Astronauts {
     return mesh
   }
 
-  /** Clear outer glass, with a restrained reflection and a thin edge highlight.
-   * Alpha blending avoids a transmission buffer or an extra scene render per frame. */
-  _visorMaterial() {
-    const mat = new THREE.MeshPhysicalMaterial({
-      color: 0xffffff, roughness: 0.08, metalness: 0, ior: 1.46,
-      transparent: true, opacity: 1, depthWrite: false, envMapIntensity: 1,
-    })
-    mat.onBeforeCompile = (shader) => {
-      withCurve(shader)
-      withLocalReflections(shader, this.reflectionUniforms)
-      shader.fragmentShader = shader.fragmentShader.replace(
-        '#include <opaque_fragment>',
-        `float facing = clamp( dot( normal, normalize( vViewPosition ) ), 0.0, 1.0 );
-         float fresnel = 0.035 + 0.965 * pow( 1.0 - facing, 5.0 );
-         // A thin window has two air/glass interfaces. Sum their reflections while
-         // preserving the transmission through to the recessed display.
-         float windowReflectance = 2.0 * fresnel / ( 1.0 + fresnel );
-         diffuseColor.a = windowReflectance;
-         // Physical specular already contains Fresnel. Undo the subsequent alpha
-         // multiplication so glass reflections aren't attenuated a second time.
-         // The background is the actual recessed screen drawn into this same buffer.
-         // Reflect the HDR environment, including the planet's sun/clouds. Analytic
-         // directional specular adds a second, needle-sharp dot to every visor.
-         outgoingLight = reflectedLight.indirectSpecular / max( fresnel, 0.035 );
-         #include <opaque_fragment>`
-      )
-    }
-    return mat
-  }
-
-  /** Opaque recessed CRT. Spatial detail fades below the pixel grid so a camera move
-   * cannot turn the phosphor pattern into moire or temporal flicker. No time noise. */
-  _faceMaterial() {
-    const mat = new THREE.MeshBasicMaterial({ map: this.faceTexture, toneMapped: true })
-    mat.onBeforeCompile = (shader) => {
-      shader.uniforms.uFrameScale = { value: new THREE.Vector2(1 / FRAME_COLS, 1 / FRAME_ROWS) }
-      shader.uniforms.uGlow = { value: 1.55 }
-      withCurve(shader)
-      this._faceUniforms = shader.uniforms
-      shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', `#include <common>
-          attribute vec2 aFrame;
-          uniform vec2 uFrameScale;
-          varying vec2 vScreenUv;
-          varying vec2 vFrameOrigin;`)
-        .replace('#include <uv_vertex>', `#include <uv_vertex>
-          vScreenUv = uv;
-          vFrameOrigin = aFrame;`)
-      shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', `#include <common>
-          uniform float uGlow;
-          uniform vec2 uFrameScale;
-          varying vec2 vScreenUv;
-          varying vec2 vFrameOrigin;`)
-        .replace('#include <map_fragment>', `
-          // Static barrel distortion bends the lettering and raster together on the
-          // inner tube; the outer window and its reflections stay undistorted.
-          vec2 tube = ( vScreenUv - 0.5 ) * 2.0;
-          vec2 crtUv = 0.5 + 0.5 * tube * ( 1.0 + 0.085 * dot( tube, tube ) );
-          vec2 atlasUv = clamp( crtUv, 0.003, 0.997 ) * uFrameScale + vFrameOrigin;
-          float mask = texture2D( map, atlasUv ).r;
-          float scanY = crtUv.y * 44.0;
-          float scanDetail = 1.0 - smoothstep( 0.28, 0.5, fwidth( scanY ) );
-          // Keep the average brightness constant as unresolvable lines fade away.
-          float raster = 0.77 - scanDetail * 0.23 * cos( scanY * 6.2831853 );
-          vec2 phosphor = crtUv * vec2( 120.0, 88.0 );
-          float dotDetail = 1.0 - smoothstep( 0.25, 0.5, max( fwidth( phosphor.x ), fwidth( phosphor.y ) ) );
-          float grain = 1.0 - dotDetail * 0.045 * ( 1.0 + cos( phosphor.x * 6.2831853 ) * cos( phosphor.y * 6.2831853 ) );
-          float edge = smoothstep( 0.25, 0.5, length( vScreenUv - 0.5 ) );
-          vec3 screen = vec3( 0.014, 0.031, 0.079 ) * ( 1.0 - edge * 0.48 );
-          // The dim phosphor bed shares the raster, while status colours still belong
-          // to each agent and every existing atlas expression remains available.
-          // Blue phosphor stripes remain visible on the unlit portions of the CRT.
-          vec3 bed = screen * ( 0.74 - scanDetail * 0.26 * cos( scanY * 6.2831853 ) );
-          diffuseColor.rgb = ( bed + vColor.rgb * mask * uGlow * raster ) * grain;
-          diffuseColor.a = 1.0;
-        `)
-        .replace('#include <color_fragment>', '')
-    }
-    return mat
-  }
-
-  _attachFrameAttribute(mesh, capacity) {
-    const data = new Float32Array(capacity * 2)
-    const attr = new THREE.InstancedBufferAttribute(data, 2)
-    attr.setUsage(THREE.DynamicDrawUsage)
-    mesh.geometry.setAttribute('aFrame', attr)
-    this.frameAttr = attr
-  }
-
   _applyShadowFlags() {
     const on = this.settings.shadowSize > 0
     for (const [name, mesh] of Object.entries(this.parts)) {
-      const wants = name !== 'face' && name !== 'tip' && name !== 'lamp' && name !== 'visor'
+      const wants = name !== 'visor'
       mesh.castShadow = on && wants
     }
     // The body is the shadow that matters — it is the whole silhouette.
@@ -446,12 +329,6 @@ export class Astronauts {
 
   onSettingsChanged(changed) {
     if (changed.has('shadows')) this._applyShadowFlags()
-    if (changed.has('textureQuality')) {
-      this.faceTexture.dispose()
-      this.faceTexture = buildFaceAtlas(Math.min(this.settings.textureSize * 2, 1024))
-      this.parts.face.material.map = this.faceTexture
-      this.parts.face.material.needsUpdate = true
-    }
     if (changed.has('maxAgents')) {
       // The instanced buffers are sized at build time, so a bigger roster needs new ones.
       const wanted = Math.max(64, this.settings.get('maxAgents'))
@@ -1441,7 +1318,7 @@ export class Astronauts {
   // ── writing the instance buffers ────────────────────────────────────────────────────
 
   _writeMatrices(elapsed, anim) {
-    const { helmet, visor, pack, antenna, tip, lamp, face, hammer } = this.parts
+    const { helmet, visor, hammer } = this.parts
     const rig = this.rig
     const crew = this.crew
     const root = this._m
@@ -1452,7 +1329,6 @@ export class Astronauts {
     const e = this._e
     const v = this._v
     const one = this._one
-    const frames = this.frameAttr.array
     const crewFrames = this.crewFrameAttr?.array
 
     let i = 0
@@ -1496,14 +1372,6 @@ export class Astronauts {
         worn.multiplyMatrices(root, bone)
         setPart(child, worn, helmet, i, 0, P.headUp, 0, 0, 0, 0)
         setPart(child, worn, visor, i, 0, P.headUp, 0, 0, 0, 0)
-        setPart(child, worn, face, i, 0, P.headUp, 0, 0, 0, 0)
-        setPart(child, worn, antenna, i, P.antX, P.antY, P.antZ, P.antRx, 0, P.antRz)
-        setPart(child, worn, tip, i, P.antX, P.antY, P.antZ, P.antRx, 0, P.antRz)
-
-        attachMatrixAt(rig, agent.frame, this.chestSlot, bone)
-        worn.multiplyMatrices(root, bone)
-        setPart(child, worn, pack, i, 0, P.packUp, P.packZ, 0, 0, 0)
-        setPart(child, worn, lamp, i, 0, P.lightY, P.lightZ, 0, 0, 0)
 
         // The hammer only exists while a thread is running, so it gets its own instance
         // counter — an unused slot in the middle of an instanced mesh still draws.
@@ -1526,25 +1394,8 @@ export class Astronauts {
       if (agent.index !== i || agent.colorDirty) {
         agent.colorDirty = false
         crew?.setColorAt(i, c.setHex(agent.suit))
-        helmet.setColorAt(i, c.setHex(agent.suit))
-        antenna.setColorAt(i, c.setHex(agent.suit))
-        pack.setColorAt(i, c.setHex(agent.suit))
-        face.setColorAt(i, agent.eye)
         staticDirty = true
       }
-
-      // Antenna tip and chest lamp pulse; a blocked agent's lamp stutters like a fault light.
-      const pulse =
-        agent.status === 'blocked'
-          ? (Math.sin(elapsed * 9) > 0.2 ? 1 : 0.05)
-          : 0.55 + 0.45 * Math.sin(elapsed * 2.6 + agent.phase)
-      tip.setColorAt(i, c.copy(agent.eye).multiplyScalar(0.6 + pulse * 1.1))
-      lamp.setColorAt(i, c.copy(agent.trim).multiplyScalar(0.7 + pulse * 1.6))
-
-      // Atlas frame for the face.
-      const f = agent.faceFrame
-      frames[i * 2] = (f % FRAME_COLS) / FRAME_COLS
-      frames[i * 2 + 1] = 1 - (Math.floor(f / FRAME_COLS) + 1) / FRAME_ROWS
 
       agent.index = i
       this._drawnAgents[i] = agent
@@ -1553,12 +1404,10 @@ export class Astronauts {
 
     const n = i
     props.end()
-    // The glowing parts pulse every frame; the rest only re-upload when something moved slot.
-    const animated = new Set(['tip', 'lamp'])
     for (const [name, mesh] of Object.entries(this.parts)) {
       mesh.count = name === 'hammer' ? hands : n
       mesh.instanceMatrix.needsUpdate = true
-      if (mesh.instanceColor && (staticDirty || animated.has(name))) mesh.instanceColor.needsUpdate = true
+      if (mesh.instanceColor && staticDirty) mesh.instanceColor.needsUpdate = true
     }
     if (crew) {
       crew.count = n
@@ -1566,7 +1415,6 @@ export class Astronauts {
       this.crewFrameAttr.needsUpdate = true
       if (staticDirty && crew.instanceColor) crew.instanceColor.needsUpdate = true
     }
-    this.frameAttr.needsUpdate = true
     this.visibleCount = n
     this._drawnAgents.length = n
   }
@@ -1701,7 +1549,6 @@ export class Astronauts {
     }
     this._disposeCrew()
     // The bone texture is the rig's, not this instance's — the rig outlives any one colony.
-    this.faceTexture.dispose()
     this.scene.remove(this.group)
   }
 }
@@ -1728,65 +1575,6 @@ function angleDamp(current, target, lambda, dt) {
   while (delta > Math.PI) delta -= Math.PI * 2
   while (delta < -Math.PI) delta += Math.PI * 2
   return current + delta * (1 - Math.exp(-lambda * dt))
-}
-
-/** A cheap rounded box: a low-segment sphere squashed to the requested proportions. */
-/**
- * A claw hammer, in the rig's own units: a shaft with a steel head across the top.
- *
- * Coloured per vertex rather than per instance, because the two halves are different
- * materials and the instance colour is already spoken for by the suit palette.
- */
-function hammerGeometry(R) {
-  const shaft = new THREE.CylinderGeometry(R * 0.055, R * 0.07, R * 1.15, 6)
-  shaft.translate(0, R * 0.24, 0)
-  paint(shaft, 0x8a6440)
-
-  // The head crosses the shaft. It is authored long along X, which is already square to the
-  // shaft's Y — turning it a quarter turn about Z, as this used to, stood the head *up in
-  // line with* the handle, so the astronaut appeared to be swinging a mallet end-on.
-  const head = roundedBox(R * 0.5, R * 0.19, R * 0.19, R * 0.05)
-  head.translate(0, R * 0.82, 0)
-  paint(head, 0x9aa0a8)
-
-  const merged = BufferGeometryUtils.mergeGeometries([shaft, head], false)
-  shaft.dispose()
-  head.dispose()
-  return merged
-}
-
-/** Bake a flat colour into a geometry's vertex colours. */
-function paint(geo, hex) {
-  const c = new THREE.Color(hex)
-  const n = geo.attributes.position.count
-  const colors = new Float32Array(n * 3)
-  for (let i = 0; i < n; i++) {
-    colors[i * 3] = c.r
-    colors[i * 3 + 1] = c.g
-    colors[i * 3 + 2] = c.b
-  }
-  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
-}
-
-function roundedBox(w, h, d, r) {
-  const geo = new THREE.BoxGeometry(w, h, d, 2, 2, 2)
-  const pos = geo.attributes.position
-  const v = new THREE.Vector3()
-  const half = new THREE.Vector3(w / 2 - r, h / 2 - r, d / 2 - r)
-  for (let i = 0; i < pos.count; i++) {
-    v.fromBufferAttribute(pos, i)
-    const inner = new THREE.Vector3(
-      THREE.MathUtils.clamp(v.x, -half.x, half.x),
-      THREE.MathUtils.clamp(v.y, -half.y, half.y),
-      THREE.MathUtils.clamp(v.z, -half.z, half.z)
-    )
-    const out = v.clone().sub(inner)
-    if (out.lengthSq() > 0) out.setLength(r)
-    pos.setXYZ(i, inner.x + out.x, inner.y + out.y, inner.z + out.z)
-  }
-  pos.needsUpdate = true
-  geo.computeVertexNormals()
-  return geo
 }
 
 function ring(inner, outer, color, opacity) {

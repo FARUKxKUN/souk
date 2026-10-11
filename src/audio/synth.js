@@ -17,7 +17,7 @@ const NOISE_SECONDS = 5
 const NOISE_CROSSFADE = 0.5
 
 const TAU = Math.PI * 2
-const rand = (lo, hi) => lo + Math.random() * (hi - lo)
+export const rand = (lo, hi) => lo + Math.random() * (hi - lo)
 
 /**
  * One buffer each of white, pink and brown noise, built once per context. Generated a
@@ -160,7 +160,7 @@ export class SampleVoice extends Voice {
 // ---------------------------------------------------------------------------------------------
 // Small building blocks.
 
-function looped(ctx, buffer, dest) {
+export function looped(ctx, buffer, dest) {
   const s = ctx.createBufferSource()
   s.buffer = buffer
   s.loop = true
@@ -171,7 +171,7 @@ function looped(ctx, buffer, dest) {
 }
 
 /** A slice of a noise buffer, played once. */
-function burst(ctx, buffer, dest, when, duration) {
+export function burst(ctx, buffer, dest, when, duration) {
   const s = ctx.createBufferSource()
   s.buffer = buffer
   s.connect(dest)
@@ -180,7 +180,7 @@ function burst(ctx, buffer, dest, when, duration) {
   return s
 }
 
-function osc(ctx, type, freq, dest, when) {
+export function osc(ctx, type, freq, dest, when) {
   const o = ctx.createOscillator()
   o.type = type
   o.frequency.value = freq
@@ -189,7 +189,7 @@ function osc(ctx, type, freq, dest, when) {
   return o
 }
 
-function filter(ctx, type, freq, q = 1) {
+export function filter(ctx, type, freq, q = 1) {
   const f = ctx.createBiquadFilter()
   f.type = type
   f.frequency.value = freq
@@ -197,7 +197,7 @@ function filter(ctx, type, freq, q = 1) {
   return f
 }
 
-function gain(ctx, value, dest) {
+export function gain(ctx, value, dest) {
   const g = ctx.createGain()
   g.gain.value = value
   if (dest) g.connect(dest)
@@ -209,7 +209,7 @@ function gain(ctx, value, dest) {
  * struck or blown thing actually does; `decay` is the time to fall to about 2%.
  * Returns when the envelope is effectively over.
  */
-function envelope(param, now, peak, attack, decay, hold = 0) {
+export function envelope(param, now, peak, attack, decay, hold = 0) {
   param.setValueAtTime(0, now)
   param.linearRampToValueAtTime(peak, now + attack)
   param.setTargetAtTime(0, now + attack + hold, decay / 4)
@@ -220,7 +220,7 @@ function envelope(param, now, peak, attack, decay, hold = 0) {
  * One FM chirp: a sine that glides from `f0` to `f1`, optionally wobbled by a modulator, with
  * an attack/decay. Every bird here is a handful of these with a different contour.
  */
-function chirp(ctx, dest, when, o) {
+export function chirp(ctx, dest, when, o) {
   const g = gain(ctx, 0, dest)
   const c = ctx.createOscillator()
   c.type = o.type || 'sine'
@@ -818,61 +818,10 @@ const ONE_SHOTS = {
     chirp(ctx, dest, now + 0.09, { f0: 140, f1: 55, dur: 0.1, gain: level * 0.8, attack: 0.004, decay: 0.12 })
     return now + 0.4
   },
-  /**
-   * Two soft marimba-ish notes a fifth apart. The one sound allowed to interrupt, so it is
-   * built to be un-hateable: slow attack, a long even decay, nothing above the fourth partial.
-   */
-  chime(ctx, dest, now, level) {
-    const note = (f, t) => {
-      const g = gain(ctx, 0, dest)
-      const a = osc(ctx, 'sine', f, g, t)
-      const pg = gain(ctx, 0.22, g)
-      const p = osc(ctx, 'sine', f * 4, pg, t)
-      pg.gain.setTargetAtTime(0, t + 0.02, 0.12) // the bright partial dies first
-      const end = envelope(g.gain, t, level, 0.02, 1.4)
-      a.stop(end + 0.05)
-      p.stop(end + 0.05)
-      return end
-    }
-    note(523.25, now)
-    return note(783.99, now + 0.22)
-  },
 }
 
 function bird(kind) {
   return (ctx, dest, now, level) => (BIRDS[kind] || BIRDS.songbird)(ctx, dest, now, level)
-}
-
-/** Wrap a scheduling function into a Voice that knows when it will be over. */
-/**
- * A robot's word: a run of short square-ish chirps, each gliding from one pitch to the next
- * with a hair of space between them. The tables are [from Hz, to Hz, seconds] per syllable.
- */
-function robotPhrase(syllables) {
-  return (ctx, dest, now, level) => {
-    let t = now
-    for (const [f0, f1, dur] of syllables) {
-      chirp(ctx, dest, t, { f0, f1, dur, gain: level * 0.5, attack: 0.008, decay: dur * 0.9 })
-      t += dur + 0.035
-    }
-    return t + 0.15
-  }
-}
-
-/**
- * A little robot's beep-boop: round sine blips, each with a soft octave partial and a hair
- * of pitch droop at the end, like a toy. The table is [Hz, seconds] per blip.
- */
-function beepBoop(blips) {
-  return (ctx, dest, now, level) => {
-    let t = now
-    for (const [f, dur] of blips) {
-      chirp(ctx, dest, t, { f0: f, f1: f * 0.94, dur, gain: level * 0.42, attack: 0.006, decay: dur * 0.7 })
-      chirp(ctx, dest, t, { f0: f * 2, f1: f * 1.9, dur: dur * 0.6, gain: level * 0.09, attack: 0.004, decay: dur * 0.4 })
-      t += dur + 0.05
-    }
-    return t + 0.12
-  }
 }
 
 function oneShot(fn) {
@@ -926,13 +875,6 @@ export const GENERATORS = {
   'ice-crack': oneShot(ONE_SHOTS.iceCrack),
   'coyote': oneShot(ONE_SHOTS.coyote),
   'drone-drop': oneShot(ONE_SHOTS.droneDrop),
-  'select-1': oneShot(robotPhrase([[880, 1320, 0.09], [1320, 1180, 0.12]])),
-  'select-2': oneShot(beepBoop([[1318, 0.08], [659, 0.13]])), // beep, boop
-  'select-3': oneShot(beepBoop([[784, 0.07], [1046, 0.07], [1568, 0.11]])), // boo-dee-beep
-  'select-4': oneShot(robotPhrase([[520, 780, 0.08], [780, 1040, 0.08], [1040, 1300, 0.12]])),
-  'select-5': oneShot(robotPhrase([[980, 980, 0.07], [980, 980, 0.07], [1470, 1240, 0.14]])),
-  'select-6': oneShot(robotPhrase([[1200, 900, 0.1], [600, 1000, 0.16]])),
-  'chime-attention': oneShot(ONE_SHOTS.chime),
 
   // Positional loops
   'work-hammer': (ctx, d, o, n) => new HammerVoice(ctx, d, n, { base: 0.5 }),

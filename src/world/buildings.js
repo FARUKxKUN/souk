@@ -2,17 +2,19 @@ import * as THREE from 'three'
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 import { mulberry } from './planet.js'
 import { ATLAS, CELL, atlasTexture, cellMask, part } from './kit.js'
+
+/** Which kit the colony's buildings are assembled from. */
+const KIT = 'medina'
 import { withCurve } from '../core/curve.js'
 
 /**
- * Colony buildings — one per thread, assembled out of KayKit's *Space Base Bits* (CC0) and
+ * Colony buildings � one per thread, assembled out of the procedural medina kit
+ * (`tools/build-medina.mjs`: whitewashed blocks, arches, blue doors, awnings, domes) and
  * seeded from the thread's own id, so a given session always builds the same structure on
  * every reload and on every planet.
  *
- * The pack is a modular one, which is the whole reason the ten kinds below can stay short:
- * a habitat is a base module with a roof module on it, a workshop is the garage variant
- * with a rover parked outside. Every part shares one gradient atlas, so a nine-part
- * greenhouse still merges down to a single geometry and a single draw call.
+ * Every part shares one flat-colour atlas, so a many-part courtyard house still merges down
+ * to a single geometry and a single draw call.
  *
  * Three things ride on top of the pack's own art:
  *
@@ -72,15 +74,20 @@ const DECK = 1.0
  * Defaults are Kay's own (roughness 0.6, metalness 0) so an unlisted swatch still looks right.
  */
 const SURFACE = {
-  [CELL.WHITE]: [0.55, 0.0], // painted hull panel
-  [CELL.GREY]: [0.46, 0.22], // structural frame — painted metal, not bare
-  [CELL.SLATE]: [0.5, 0.3],
-  [CELL.BLACK]: [0.6, 0.18],
-  [CELL.ROCK]: [0.95, 0.0], // regolith and terrain chunks — never shiny
-  [CELL.TRIM]: [0.42, 0.08], // painted trim, semi-gloss
-  [CELL.RED]: [0.55, 0.04],
-  [CELL.SOLAR_A]: [0.16, 0.7], // photovoltaic glass, and dark on purpose
-  [CELL.SOLAR_B]: [0.16, 0.7],
+  [CELL.WHITE]: [0.85, 0.0], // lime wash
+  [CELL.LIME]: [0.9, 0.0], // limestone
+  [CELL.SHADE]: [0.9, 0.0],
+  [CELL.DARK]: [0.8, 0.0],
+  [CELL.BLUE]: [0.55, 0.0], // painted wood
+  [CELL.BLUE_DARK]: [0.55, 0.0],
+  [CELL.TERRA]: [0.85, 0.0],
+  [CELL.COPPER]: [0.38, 0.6], // the only real metal on the plot
+  [CELL.LAMP]: [0.3, 0.0],
+  [CELL.WOOD]: [0.8, 0.0],
+  [CELL.TRIM]: [0.4, 0.0], // glass and frieze
+  [CELL.RED]: [0.9, 0.0], // cloth
+  [CELL.IRON]: [0.5, 0.45],
+  [CELL.MINT]: [0.45, 0.05], // glazed dome tile
 }
 
 const CELL_COUNT = ATLAS.cols * ATLAS.rows
@@ -99,7 +106,7 @@ const ACCENT_MASK = cellMask([CELL.TRIM])
  * Everything with a colour of its own — trim, solar glass, the red — keeps it, or the
  * repaint flattens a building into a single-tone lump.
  */
-const PLANET_TINT_MASK = cellMask([CELL.WHITE, CELL.GREY, CELL.SLATE])
+const PLANET_TINT_MASK = cellMask([CELL.WHITE, CELL.LIME, CELL.SHADE])
 
 // ── composition ───────────────────────────────────────────────────────────────────────
 
@@ -117,7 +124,7 @@ class Composer {
    * @param {object} [o]   `x`/`y`/`z` offset, `ry` yaw, `s` uniform scale, `emissive` 0..1
    */
   add(name, o = {}) {
-    const geo = part(name, 'base', { solo: o.solo })
+    const geo = part(name, KIT, { solo: o.solo })
     const s = o.s ?? 1
     if (s !== 1) geo.scale(s, s, s)
     if (o.ry) geo.rotateY(o.ry)
@@ -174,96 +181,77 @@ const pick = (rand, list) => list[Math.floor(rand() * list.length)]
  * rather than a row of the same shed.
  */
 const KINDS = {
-  habitat(c, rand) {
-    c.add(pick(rand, ['basemodule_A', 'basemodule_B', 'basemodule_C', 'basemodule_D']))
-    c.add(pick(rand, ['roofmodule_base', 'roofmodule_cargo_A', 'roofmodule_cargo_B']), { y: DECK })
-    if (rand() > 0.45) c.add('lights', { x: 1.15, z: 0.85, s: 0.85, ry: rand() * 6.28 })
-    if (rand() > 0.6) c.add('containers_A', { x: -1.15, z: 0.9, ry: rand() * 6.28 })
-    return 'Habitat'
+  /** A one-room stall: small block, blue door, canvas awning over a counter, an anvil outside. */
+  stall(c, rand) {
+    c.add('block_s', { z: -0.2 })
+    c.add('door_arch', { x: -0.15, z: 0.45, s: 0.85 })
+    c.add('window', { x: 0.4, y: 0.4, z: 0.45, s: 0.8 })
+    c.add('awning', { x: 0.1, z: 0.45, s: 0.7 })
+    c.add('counter', { x: 0.1, z: 1.0, s: 0.8 })
+    c.add('anvil', { x: 1.0, z: 0.75, ry: rand() * 6.28, s: 0.9 })
+    c.add('lantern_wall', { x: -0.55, y: 0.62, z: 0.45 })
+    c.add('lantern_wall_lamp', { x: -0.55, y: 0.62, z: 0.45, emissive: 1 })
+    if (rand() > 0.4) c.add(pick(rand, ['pot_a', 'jar', 'basket']), { x: -0.9, z: 0.9, ry: rand() * 6.28 })
+    return 'Stall'
   },
 
-  solar(c, rand) {
-    const cols = 2 + Math.floor(rand() * 2)
-    const rows = 2 + Math.floor(rand() * 2)
-    for (let i = 0; i < cols; i++) {
-      for (let j = 0; j < rows; j++) {
-        c.add('solarpanel', {
-          x: (i - (cols - 1) / 2) * 1.05,
-          z: (j - (rows - 1) / 2) * 0.62,
-          // A whole field tilted the same way is what makes an array read as an array.
-          ry: 0.06 * (rand() - 0.5),
-        })
-      }
-    }
-    c.add('lights', { x: cols * 0.6, z: -rows * 0.4, s: 0.8 })
-    c.add('containers_B', { x: -cols * 0.6, z: rows * 0.35, ry: 0.4 })
-    return 'Solar array'
-  },
-
-  antenna(c, rand) {
-    // The tall turbine mast — the only silhouette in the pack that breaks the skyline. The
-    // tower is taken *solo* so the rotor can be put back on as a part that turns.
-    const tall = rand() > 0.3
-    const [tower, hub] = tall ? ['windturbine_tall', 2.05] : ['windturbine_low', 0.89]
-    c.add(tower, { solo: true })
-    // Slow: a turbine that whips round reads as a desk fan. A little over half a minute a
-    // turn, jittered so a row of them never falls into step.
-    c.add(`${tower}_fan`, { y: hub, spin: 0.17 + rand() * 0.09 })
-    c.add('containers_C', { x: 0.9, z: 0.75, ry: rand() * 6.28 })
-    if (rand() > 0.5) c.add('lights', { x: -0.95, z: -0.7, s: 0.8 })
-    return 'Relay mast'
-  },
-
-  silo(c, rand) {
-    c.add(pick(rand, ['cargodepot_A', 'cargodepot_B', 'cargodepot_C']))
-    if (rand() > 0.5) c.add(pick(rand, ['cargo_A_stacked', 'cargo_B_stacked']), { x: 1.35, z: 0.4, ry: rand() * 6.28 })
-    return 'Storage'
-  },
-
-  greenhouse(c, rand) {
-    // The geodesic-topped module — the pack's own biodome.
-    c.add('basemodule_E')
-    c.ring('containers_D', 2 + Math.floor(rand() * 2), 1.45, rand)
-    return 'Greenhouse'
-  },
-
-  reactor(c, rand) {
-    c.add('drill_structure')
-    c.ring('cargo_A', 3, 1.35, rand)
-    if (rand() > 0.5) c.add('lights', { x: -1.2, z: 1.0, s: 0.9 })
-    return 'Reactor'
-  },
-
-  tower(c, rand) {
-    c.add('structure_tall')
-    c.add('lights', { y: 2.0, s: 0.7 })
-    if (rand() > 0.5) c.add('containers_A', { x: 1.15, z: 0.95, ry: rand() * 6.28 })
-    return 'Tower'
-  },
-
+  /** A workshop: wide block, an awning over the work bench, rug and stools in the alley. */
   workshop(c, rand) {
-    c.add('basemodule_garage')
-    c.add('roofmodule_solarpanels', { y: DECK })
-    // Something parked outside: an empty forecourt reads as unfinished.
-    if (rand() > 0.3) {
-      c.add(pick(rand, ['spacetruck', 'spacetruck_large']), { x: 1.55, z: 0.3, ry: Math.PI / 2 + (rand() - 0.5) * 0.5 })
-    }
-    if (rand() > 0.5) c.add('spacetruck_trailer', { x: 1.55, z: 1.35, ry: Math.PI / 2 })
+    c.add('block_m', { z: -0.3 })
+    c.add('door_arch', { x: 0.5, z: 0.7 })
+    c.add('window_arch', { x: -0.55, y: 0.9, z: 0.7 })
+    c.add('window', { x: 0.5, y: 1.0, z: 0.7, s: 0.8 })
+    c.add('awning', { x: -0.5, z: 0.7, s: 0.75 })
+    c.add('counter', { x: -0.5, z: 1.15, s: 0.75 })
+    c.add('rug', { x: 0.55, z: 1.25, ry: (rand() - 0.5) * 0.3, s: 0.8 })
+    c.add('stool', { x: 1.15, z: 1.0, ry: rand() * 6.28, s: 0.9 })
+    c.add('anvil', { x: -1.2, z: 1.0, ry: rand() * 6.28, s: 0.85 })
+    c.add('lantern_wall', { x: 0.05, y: 0.55, z: 0.7 })
+    c.add('lantern_wall_lamp', { x: 0.05, y: 0.55, z: 0.7, emissive: 1 })
+    if (rand() > 0.5) c.add('pot_plant', { x: 1.1, y: 1.58, z: -1.0, s: 0.8 })
     return 'Workshop'
   },
 
-  pad(c, rand) {
-    c.add(rand() > 0.35 ? 'landingpad_large' : 'landingpad_small')
-    if (rand() > 0.4) c.add(pick(rand, ['lander_A', 'lander_B']), { y: 0.5, ry: rand() * 6.28 })
-    else c.add('lander_base', { y: 0.5, ry: rand() * 6.28 })
-    return 'Landing pad'
+  /** A two-storey house: blue door, arched upper windows, a plant on the roof. */
+  house(c, rand) {
+    c.add('block_l', { z: 0 })
+    c.add('door_arch', { x: 0, z: 1.0 })
+    c.add('window_arch', { x: -0.6, y: 1.5, z: 1.0 })
+    c.add('window_arch', { x: 0.6, y: 1.5, z: 1.0 })
+    c.add('window', { x: -0.65, y: 0.5, z: 1.0, s: 0.8 })
+    c.add('window', { x: 0.65, y: 0.5, z: 1.0, s: 0.8 })
+    c.add('lantern_wall', { x: 0.55, y: 0.95, z: 1.0, s: 0.9 })
+    c.add('lantern_wall_lamp', { x: 0.55, y: 0.95, z: 1.0, s: 0.9, emissive: 1 })
+    c.add('pot_plant', { x: 0.65, y: 2.58, z: 0.65, s: 0.8 })
+    if (rand() > 0.5) c.add('jar', { x: -0.95, z: 1.3, ry: rand() * 6.28, s: 0.9 })
+    return 'House'
   },
 
-  lab(c, rand) {
-    c.add(pick(rand, ['basemodule_C', 'basemodule_A']))
-    c.add('roofmodule_cargo_C', { y: DECK })
-    c.ring(pick(rand, ['containers_B', 'containers_C']), 2, 1.4, rand)
-    return 'Lab'
+  /** A courtyard house: one block under a mint-tiled dome, steps up to the door. */
+  courtyard(c, rand) {
+    c.add('block_m', { z: -0.1 })
+    c.add('dome', { y: 1.58, z: -0.1, s: 1.0 })
+    c.add('door_arch', { x: 0, z: 0.9 })
+    c.add('stairs', { x: 0, z: 0.9, s: 0.75 })
+    c.add('window_arch', { x: -0.65, y: 0.8, z: 0.9 })
+    c.add('window_arch', { x: 0.65, y: 0.8, z: 0.9 })
+    c.add('lantern_pole', { x: -1.15, z: 1.05, s: 0.7 })
+    c.add('lantern_lamp', { x: -1.15, z: 1.05, s: 0.7, emissive: 1 })
+    if (rand() > 0.4) c.add('dome_small', { x: 0.75, y: 1.58, z: -0.75, s: 0.7 })
+    c.add(pick(rand, ['pot_plant', 'jar']), { x: 1.05, z: 1.2, ry: rand() * 6.28 })
+    return 'Courtyard house'
+  },
+
+  /** A minaret-ish tower with a copper finial, the one silhouette that breaks the skyline. */
+  tower(c, rand) {
+    c.add('tower', { z: -0.1 })
+    c.add('door_arch', { z: 0.3, s: 0.65 })
+    c.add('stairs', { z: 0.3, s: 0.55 })
+    c.add('lantern_wall', { x: 0.28, y: 0.5, z: 0.3, s: 0.8 })
+    c.add('lantern_wall_lamp', { x: 0.28, y: 0.5, z: 0.3, s: 0.8, emissive: 1 })
+    c.add('crate', { x: 0.75, z: 0.55, ry: rand() * 6.28 })
+    if (rand() > 0.4) c.add('pot_a', { x: -0.7, z: 0.5 })
+    return 'Tower'
   },
 }
 
@@ -395,6 +383,8 @@ function decorate(material, uniforms) {
          totalEmissiveRadiance += diffuseColor.rgb * vEmissive * ( 0.25 + uNight * 2.4 );
          // Window strips and trim come on after dark, in the repo's own colour.
          totalEmissiveRadiance += uAccent * uCellAccent[ cell ] * uNight * 1.15;
+         // Lantern glass burns a warm copper whatever the day, brighter after dark.
+         if ( cell == ${CELL.LAMP} ) totalEmissiveRadiance += vec3( 1.0, 0.55, 0.22 ) * ( 0.35 + uNight * 2.2 );
          // The construction line: a bright band riding just above the ground it rises from.
          float band = 1.0 - smoothstep( 0.0, 0.22, vLocalY - ground );
          totalEmissiveRadiance += uAccent * band * ( 1.0 - step( 0.999, uProgress ) ) * 1.5;`
@@ -515,7 +505,7 @@ export function createBuilding({ seed = 1, accent = 0xc96442, kind = null } = {}
 
   const material = decorate(
     new THREE.MeshStandardMaterial({
-      map: atlasTexture(),
+      map: atlasTexture(KIT),
       // Roughness and metalness arrive per atlas cell; these are only the fallback values.
       roughness: 0.6,
       metalness: 0,

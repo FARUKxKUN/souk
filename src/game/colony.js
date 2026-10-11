@@ -67,14 +67,14 @@ const LAYOUT_MEMORY = 80
 export const STATUS_ORDER = ['blocked', 'waiting', 'working', 'celebrating', 'idle', 'sleeping']
 
 export const STATUS_LABEL = {
-  working: 'Working',
-  waiting: 'Waiting on you',
-  blocked: 'Blocked',
-  celebrating: 'Shipped',
+  working: 'At work',
+  waiting: 'Needs you',
+  blocked: 'Stuck',
+  celebrating: 'Done',
   idle: 'Idle',
-  sleeping: 'Dormant',
+  sleeping: 'Asleep',
   spawning: 'Arriving',
-  leaving: 'Heading home',
+  leaving: 'Leaving',
 }
 
 /** Thread → behaviour. First match wins, exactly like the board's auto-sort. */
@@ -1163,7 +1163,7 @@ export class Colony {
    * Light that lives *on* things. Every building near the view sheds a slow mote now and
    * then — warm by day, its plot's accent after dark, when the windows are lit — the lander's
    * beacon draws a few of its own, and on a world with anything growing on it the yard fills
-   * with fireflies once the sun is down. Particles spawned around the camera say "weather";
+   * with fireflies and lantern embers once the sun is down. Particles spawned around the camera say "weather";
    * these say "this place is alive".
    */
   _emitMotes(dt, night) {
@@ -1188,14 +1188,15 @@ export class Colony {
       if (Math.random() < dt * rate) {
         const r = 0.9 + Math.random() * 1.4
         const a = Math.random() * Math.PI * 2
-        if (night > 0.35) c.set(entry.accent).lerp(this._c2.set(0xfff0c0), 0.35).multiplyScalar(2.2)
-        else c.set(0xfff2d0).multiplyScalar(1.6)
+        // Lantern embers after dark, dust turning in a sunbeam by day.
+        if (night > 0.35) c.set(0xb87333).lerp(this._c2.set(0xffc070), 0.5).multiplyScalar(2.4)
+        else c.set(0xfff0d0).multiplyScalar(1.5)
         this.particles.mote(p.x + Math.cos(a) * r, p.y + 0.4 + Math.random() * 1.8, p.z + Math.sin(a) * r, c, 0.055, 4)
       }
       if (fireflies && Math.random() < dt * (full ? 0.7 : 0.35) * night) {
         const r = 1.5 + Math.random() * 3.5
         const a = Math.random() * Math.PI * 2
-        c.setRGB(1.5, 2.3, 0.55)
+        c.setRGB(2.3, 1.6, 0.45)
         this.particles.mote(p.x + Math.cos(a) * r, p.y + 0.2 + Math.random() * 1.2, p.z + Math.sin(a) * r, c, 0.07, 5)
       }
     }
@@ -1206,7 +1207,7 @@ export class Colony {
     if (sdx * sdx + sdz * sdz < reach2 && Math.random() < dt * (0.8 + night * 1.4)) {
       const a = Math.random() * Math.PI * 2
       const r = 2 + Math.random() * 3
-      c.setRGB(0.7, 1.4, 2.4)
+      c.setRGB(2.3, 1.3, 0.5)
       this.particles.mote(ship.x + Math.cos(a) * r, ship.y + 0.3 + Math.random() * 5, ship.z + Math.sin(a) * r, c, 0.06, 5)
     }
   }

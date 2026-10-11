@@ -41,7 +41,7 @@ const app = document.getElementById('app')
 app.insertAdjacentHTML(
   'beforeend',
   `<div class="boot"><div class="inner">
-     <h1>Bot Crossing</h1>
+     <h1>SOUK</h1>
      <p>Scanning for agent threads…</p>
      <div class="bar"><i></i></div>
    </div></div>`
@@ -103,7 +103,7 @@ const actions = {
   /** Google Earth's auto-rotate: a slow sweep around whatever is centred. */
   toggleOrbit: () => {
     const on = rig.toggleOrbit()
-    hud.hint(on ? 'Orbit mode on — drag or press O to stop' : 'Orbit mode off')
+    hud.hint(on ? 'Orbit mode on - drag or press O to stop' : 'Orbit mode off')
     return on
   },
 
@@ -111,7 +111,7 @@ const actions = {
     const ids = Object.keys(PLANETS)
     const next = ids[(ids.indexOf(settings.get('planet')) + 1) % ids.length]
     settings.set('planet', next)
-    hud.hint(`${PLANETS[next].name} — ${PLANETS[next].blurb}`)
+    hud.hint(`${PLANETS[next].name} - ${PLANETS[next].blurb}`)
   },
 
   cycleTime: () => {
@@ -129,7 +129,7 @@ const actions = {
     const key = status === 'agents' ? null : status
     const pool = colony.astronauts.agents.filter((a) => (key ? a.status === key : true))
     if (!pool.length) {
-      hud.hint(key ? `Nobody is ${(STATUS_LABEL[key] || key).toLowerCase()} right now` : 'No bots on the surface')
+      hud.hint(key ? `Nobody is ${(STATUS_LABEL[key] || key).toLowerCase()} right now` : 'No artisans in the souk')
       return
     }
     pool.sort((a, b) => a.id.localeCompare(b.id))
@@ -173,7 +173,7 @@ const actions = {
       const harness = harnessForProject(name)
       const shown = await newSession(folder, harness, settings.get('openIn'))
       const label = harnessLabel(harness)
-      hud.toast(`New thread in ${name} — ${shown.via === 'terminal' ? `${label} in a terminal` : `opening ${label}`}`)
+      hud.toast(`New thread in ${name} - ${shown.via === 'terminal' ? `${label} in a terminal` : `opening ${label}`}`)
       // It lands as an astronaut walking down the ramp, once it has a record to scan.
       setTimeout(poll, 6000)
     } catch (err) {
@@ -221,7 +221,7 @@ const actions = {
     }
     selectedProject = null
     applyThreads(threads)
-    hud.toast(`Hidden ${name} — still in your harness, gone from the colony`)
+    hud.toast(`Hidden ${name} - still in your harness, gone from the souk`)
   },
 
   unhideProject: (name) => {
@@ -280,8 +280,8 @@ const actions = {
     const folded = [...(colony.dormantProjects || [])].filter((n) => !foldedBefore.has(n))
     hud.toast(
       folded.length
-        ? `Archived — ${folded.join(', ')} ${folded.length === 1 ? 'is' : 'are'} all quiet now, folded off the map`
-        : 'Archived — heading home'
+        ? `Archived - ${folded.join(', ')} ${folded.length === 1 ? 'is' : 'are'} all quiet now, folded off the map`
+        : 'Archived - heading out through the gate'
     )
     colony.ship.ping()
   },
@@ -1047,7 +1047,7 @@ async function boot() {
         // state rather than an error, so a rejection means it could not be reached and we do not
         // know what is on disk. Saves stay off for this session and say so, because an archive
         // that silently fails to persist is worse than one that refuses.
-        hud.toast('Could not read the saved colony — archiving is off until you reload', 'err')
+        hud.toast('Could not read the saved souk - archiving is off until you reload', 'err')
       }),
     settle(loadKit()),
     settle(loadCrew()),
@@ -1071,7 +1071,7 @@ async function boot() {
     hud.toggleHelp(true)
     localStorage.setItem('botcrossing.seen-help', '1')
   } else {
-    hud.hint('Drag to move · click a bot · H hides everything', 5200)
+    hud.hint('Drag to move · click an artisan · H hides everything', 5200)
   }
 }
 

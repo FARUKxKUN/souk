@@ -11,7 +11,7 @@ import { withCurve } from '../core/curve.js'
  * the astronauts hand over the chest bone's matrix and how far into the check they are,
  * and the prop places itself.
  *
- * One kind so far: a folding phone. More can be added here and cycled by `pickProp`.
+ * One kind so far: a ledger (the old folding-phone geometry, re-skinned). More can be added here and cycled by `pickProp`.
  */
 
 /** Seconds a check lasts, and the gap between one and the next, in seconds. */
@@ -84,8 +84,8 @@ export class Props {
     const h = PHONE.h * R
     const t = PHONE.t * R
 
-    const body = new THREE.MeshStandardMaterial({ color: 0x2b2e35, roughness: 0.42, metalness: 0.55 })
-    const back = new THREE.MeshStandardMaterial({ map: pearTexture(), roughness: 0.42, metalness: 0.55 })
+    const body = new THREE.MeshStandardMaterial({ color: 0x5a3320, roughness: 0.7, metalness: 0.05 })
+    const back = new THREE.MeshStandardMaterial({ map: pearTexture(), roughness: 0.7, metalness: 0.05 })
     const screen = this._screenMaterial()
 
     // Box faces come grouped +X, -X, +Y, -Y, +Z, -Z, so each face can carry its own material:
@@ -146,46 +146,31 @@ export class Props {
           '#include <color_fragment>',
           `#include <color_fragment>
            {
-             // A phone screen: a thin bezel, a dark glass ground, a status bar, and a feed of
-             // rounded cards scrolling up — each a line of something being done — with a
-             // progress bar creeping along near the top. Procedural, per instance.
-             vec2 inner = ( vScreenUv - 0.04 ) / 0.92;
+             // A ledger page: leather cover edge, cream paper, ruled lines of ink scrolling
+             // up as the artisan turns pages, and now and then a red stamp. Per instance.
+             vec2 inner = ( vScreenUv - 0.05 ) / 0.9;
              if ( any( lessThan( inner, vec2( 0.0 ) ) ) || any( greaterThan( inner, vec2( 1.0 ) ) ) ) {
-               diffuseColor.rgb = vec3( 0.012, 0.013, 0.018 );
+               diffuseColor.rgb = vec3( 0.12, 0.06, 0.03 );
              } else {
-               vec3 col = mix( vec3( 0.06, 0.07, 0.12 ), vec3( 0.09, 0.10, 0.17 ), inner.y );
-               // Status bar: a time-ish blob left, three dots right.
-               float bar = step( 0.93, inner.y );
-               float pips = step( 0.04, inner.x ) * step( inner.x, 0.2 ) + step( 0.78, inner.x ) * step( 0.5, bcHash( floor( inner.x * 30.0 ) + vSeed ) ) * step( inner.x, 0.96 );
-               col = mix( col, vec3( 0.75, 0.8, 0.9 ), bar * pips * step( 0.95, inner.y ) * step( inner.y, 0.985 ) );
-               // Progress bar under the status bar, filling and resetting.
-               float prog = fract( uTime * 0.13 + vSeed );
-               float pb = step( 0.86, inner.y ) * step( inner.y, 0.895 ) * step( 0.06, inner.x ) * step( inner.x, 0.94 );
-               col = mix( col, vec3( 0.16, 0.18, 0.28 ), pb );
-               col = mix( col, vec3( 0.35, 0.75, 1.0 ), pb * step( inner.x, 0.06 + prog * 0.88 ) );
-               // The feed: cards of random width and colour, scrolling up.
-               float rows = 9.0;
-               float y = inner.y * rows + uTime * 1.1 + vSeed * 7.0;
+               vec3 col = mix( vec3( 0.86, 0.78, 0.6 ), vec3( 0.93, 0.87, 0.72 ), inner.y );
+               float rows = 11.0;
+               float y = inner.y * rows + uTime * 0.35 + vSeed * 7.0;
                float row = floor( y );
                float fy = fract( y );
-               float w = 0.3 + bcHash( row * 3.7 + vSeed ) * 0.6;
-               float kind = bcHash( row * 5.1 + vSeed );
-               vec3 ink = kind < 0.45 ? vec3( 0.9, 0.92, 0.97 ) : kind < 0.7 ? vec3( 0.35, 0.65, 1.0 ) : kind < 0.88 ? vec3( 0.4, 0.9, 0.72 ) : vec3( 1.0, 0.72, 0.35 );
-               // Rounded card: inset on x, with a gap above and below.
-               float cx = ( inner.x - 0.06 ) / 0.88;
-               float inCard = step( 0.0, cx ) * step( cx, w ) * step( 0.18, fy ) * step( fy, 0.82 ) * step( inner.y, 0.84 );
-               // A short bright tag at the left of each card, the rest dimmer.
-               float tag = step( cx, 0.12 );
-               col = mix( col, mix( ink * 0.35, ink, tag ), inCard );
-               // Flicker: the whole panel dips a hair now and then, one card flashes.
-               float flicker = 0.9 + 0.1 * step( 0.3, bcHash( floor( uTime * 12.0 ) + vSeed ) );
-               float flash = step( 0.97, bcHash( row + floor( uTime * 4.0 ) * 0.31 + vSeed ) ) * inCard;
-               diffuseColor.rgb = col * flicker * 1.15 + ink * flash * 0.6;
+               float w = 0.35 + bcHash( row * 3.7 + vSeed ) * 0.55;
+               float cx = ( inner.x - 0.08 ) / 0.84;
+               float line = step( 0.0, cx ) * step( cx, w ) * step( 0.4, fy ) * step( fy, 0.62 );
+               float stamp = step( 0.9, bcHash( row * 5.1 + vSeed ) ) * step( 0.78, inner.x ) * step( inner.x, 0.94 ) * step( 0.2, fy ) * step( fy, 0.8 );
+               col = mix( col, vec3( 0.2, 0.12, 0.08 ), line * 0.85 );
+               col = mix( col, vec3( 0.66, 0.2, 0.18 ), stamp );
+               // Faint ruled guide under every line.
+               col *= 1.0 - 0.08 * step( 0.9, fy );
+               diffuseColor.rgb = col;
              }
            }`
         )
     }
-    mat.customProgramCacheKey = () => 'bc-prop-screen'
+    mat.customProgramCacheKey = () => 'souk-prop-ledger'
     return mat
   }
 
@@ -292,8 +277,8 @@ function roundedBox(w, h, d, r) {
 }
 
 /**
- * The back of the phone: the body colour with a pear on it — a pear, because it is not an
- * apple. Drawn once into a small canvas.
+ * The back of the ledger: leather with an eight-pointed copper star, the rub el hizb.
+ * Drawn once into a small canvas.
  */
 function pearTexture() {
   const size = 128
@@ -301,44 +286,22 @@ function pearTexture() {
   canvas.width = size
   canvas.height = size
   const c = canvas.getContext('2d')
-  c.fillStyle = '#2b2e35'
+  c.fillStyle = '#5a3320'
   c.fillRect(0, 0, size, size)
-
-  // The pear sits in the upper middle of the back, the way a logo does.
+  c.fillStyle = '#b87333'
   const cx = size / 2
-  const cy = size * 0.44
-  const u = size * 0.09 // unit
-  c.fillStyle = '#c9ccd2'
+  const cy = size / 2
+  const r = size * 0.28
+  for (const turn of [0, Math.PI / 4]) {
+    c.save()
+    c.translate(cx, cy)
+    c.rotate(turn)
+    c.fillRect(-r, -r, r * 2, r * 2)
+    c.restore()
+  }
+  c.fillStyle = '#5a3320'
   c.beginPath()
-  // Body: a wide bottom lobe and a narrower top lobe, joined.
-  c.arc(cx, cy + u * 1.1, u * 1.75, 0, Math.PI * 2)
-  c.fill()
-  c.beginPath()
-  c.arc(cx, cy - u * 0.9, u * 1.2, 0, Math.PI * 2)
-  c.fill()
-  c.beginPath()
-  c.moveTo(cx - u * 1.2, cy - u * 0.9)
-  c.lineTo(cx - u * 1.75, cy + u * 1.1)
-  c.lineTo(cx + u * 1.75, cy + u * 1.1)
-  c.lineTo(cx + u * 1.2, cy - u * 0.9)
-  c.closePath()
-  c.fill()
-  // A bite out of the right side, since that is the joke.
-  c.fillStyle = '#2b2e35'
-  c.beginPath()
-  c.arc(cx + u * 1.9, cy + u * 0.2, u * 0.8, 0, Math.PI * 2)
-  c.fill()
-  // Stem and leaf.
-  c.strokeStyle = '#c9ccd2'
-  c.lineWidth = u * 0.28
-  c.lineCap = 'round'
-  c.beginPath()
-  c.moveTo(cx, cy - u * 2.0)
-  c.quadraticCurveTo(cx + u * 0.2, cy - u * 2.8, cx + u * 0.7, cy - u * 3.1)
-  c.stroke()
-  c.fillStyle = '#c9ccd2'
-  c.beginPath()
-  c.ellipse(cx - u * 0.75, cy - u * 2.6, u * 0.85, u * 0.38, -0.6, 0, Math.PI * 2)
+  c.arc(cx, cy, r * 0.45, 0, Math.PI * 2)
   c.fill()
 
   const tex = new THREE.CanvasTexture(canvas)

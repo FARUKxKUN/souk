@@ -31,6 +31,8 @@ const STEPS = [
   // is kept, and the recolours that turn an oak into a cherry tree, live in there.
   ['tools/build-nature.mjs', 'assets-src/kenney_nature-kit/Models/GLTF format', 'public/assets/nature.glb'],
   ['tools/build-crew.mjs'],
+  // The medina kit is generated in-repo, not packed from a download.
+  ['tools/build-medina.mjs', 'public/assets/medina.glb'],
 ]
 
 for (const [script, ...args] of STEPS) {

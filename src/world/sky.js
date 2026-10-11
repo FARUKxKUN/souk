@@ -144,6 +144,26 @@ const SHADOW_EXTENT = 30
  */
 const SHADOW_SNAP = 2
 
+/** A white crescent on transparent, tinted by the material colour. */
+function crescentTexture() {
+  const size = 128
+  const c = document.createElement('canvas')
+  c.width = size
+  c.height = size
+  const g = c.getContext('2d')
+  g.fillStyle = '#fff'
+  g.beginPath()
+  g.arc(size / 2, size / 2, size * 0.4, 0, Math.PI * 2)
+  g.fill()
+  g.globalCompositeOperation = 'destination-out'
+  g.beginPath()
+  g.arc(size * 0.6, size * 0.44, size * 0.36, 0, Math.PI * 2)
+  g.fill()
+  const tex = new THREE.CanvasTexture(c)
+  tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+}
+
 export class Sky {
   constructor(scene, settings, renderer) {
     this.scene = scene
@@ -356,10 +376,17 @@ export class Sky {
   /** The big body hanging in the sky — Earth from the Moon, a moon from Terra, and so on. */
   _buildCompanion() {
     this.companion = new THREE.Group()
-    const geo = new THREE.SphereGeometry(1, 24, 18)
+    // A plain crescent moon: a camera-facing quad with a drawn crescent.
+    const geo = new THREE.PlaneGeometry(2, 2)
     this.companionBody = new THREE.Mesh(
       geo,
-      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0 })
+      new THREE.MeshBasicMaterial({
+        map: crescentTexture(),
+        transparent: true,
+        depthWrite: false,
+        depthTest: false,
+        fog: false,
+      })
     )
     // A soft halo billboard behind it, so it glows rather than sitting flat on the sky.
     const haloGeo = new THREE.PlaneGeometry(4, 4)
@@ -397,14 +424,13 @@ export class Sky {
     this.dayBottom = new THREE.Color(planet.sky.bottom)
     // Night is the day palette crushed toward the planet's own horizon colour, so each
     // world keeps its identity after dark instead of all three going the same black.
-    this.nightTop = new THREE.Color(planet.sky.top).multiplyScalar(0.16).lerp(new THREE.Color(0x03040c), 0.7)
-    this.nightBottom = new THREE.Color(planet.horizon).multiplyScalar(0.5)
-    this.duskColor = new THREE.Color(planet.atmosphere > 0.4 ? 0xd4692f : 0x4a3550)
+    this.nightTop = new THREE.Color(0x141a3a)
+    // Warm copper lantern glow at the horizon, deep indigo overhead.
+    this.nightBottom = new THREE.Color(0x3a2a3c)
+    this.duskColor = new THREE.Color(0xc8703a)
 
     const comp = planet.companion
     this.companionBody.material.color.set(comp.color)
-    this.companionBody.material.emissive.set(comp.color)
-    this.companionBody.material.emissiveIntensity = 0.35
     this.companionHalo.material.uniforms.uColor.value.set(comp.glow)
     this.companion.scale.setScalar(comp.size)
     // Parked high and off to one side, well away from where the sun tracks.
@@ -500,7 +526,7 @@ export class Sky {
     this.stars.visible = this.settings.get('stars') && this.stars.material.uniforms.uOpacity.value > 0.01
 
     this.companionHalo.material.uniforms.uStrength.value = 0.35 + (1 - day) * 0.65
-    this.companionBody.material.emissiveIntensity = 0.25 + (1 - day) * 0.55
+    this.companionBody.material.opacity = 0.35 + (1 - day) * 0.65
 
     // Fog follows the horizon, or the whole world looks like it is behind glass at night.
     this.scene.fog.color.copy(bottom).lerp(this._c1.set(planet.fog.color), 0.55)
@@ -575,6 +601,7 @@ export class Sky {
     this.stars.geometry.dispose()
     this.stars.material.dispose()
     this.companionBody.geometry.dispose()
+    this.companionBody.material.map?.dispose()
     this.companionBody.material.dispose()
     this.companionHalo.geometry.dispose()
     this.companionHalo.material.dispose()

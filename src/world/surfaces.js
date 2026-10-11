@@ -1,8 +1,8 @@
 import * as THREE from 'three'
 
 /**
- * Procedurally drawn surfaces for the colony's own structures — the plot decks and the
- * kerbs that edge them.
+ * Procedurally drawn surfaces for the souk's own structures - the workshop paving and the
+ * painted kerbs that edge them.
  *
  * These are drawn rather than shipped for the same reason the face atlas is: they have to
  * take each repo's accent colour, and a painted texture cannot. Everything here is authored
@@ -25,7 +25,7 @@ let deck = null
 let kerb = null
 
 /**
- * The plot deck: a plated metal floor of bolted panels.
+ * The workshop paving: limestone flagstones with a little zellige inlay.
  *
  * Authored to tile, so a plot of seven hex cells reads as one continuous apron rather than
  * seven repeats of a medallion.
@@ -38,73 +38,71 @@ export function deckSurface(size = 512) {
   const a = albedo.ctx
   const h = height.ctx
 
-  // Base plate. Mid grey both times: the albedo so the accent tint has something neutral to
-  // multiply, the height so seams can cut down and bolts can stand up from a middle.
-  a.fillStyle = '#8e9296'
+  // Base: pale limestone, near-neutral so the workshop's accent tint multiplies cleanly.
+  a.fillStyle = '#e4ded2'
   a.fillRect(0, 0, size, size)
   h.fillStyle = '#808080'
   h.fillRect(0, 0, size, size)
 
-  const panels = 2
+  const panels = 4
   const step = size / panels
-  const seam = Math.max(2, Math.round(size / 170))
-
-  // Panels, each a shade off its neighbour so the floor is never one flat field.
+  const joint = Math.max(2, Math.round(size / 200))
   const rand = mulberry(0x5eed)
-  for (let px = 0; px < panels; px++) {
-    for (let py = 0; py < panels; py++) {
-      const shade = 138 + Math.round((rand() - 0.5) * 16)
-      a.fillStyle = `rgb(${shade},${shade + 3},${shade + 6})`
-      a.fillRect(px * step + seam, py * step + seam, step - seam * 2, step - seam * 2)
+
+  // Flagstones, each a shade off its neighbour, set in a running bond.
+  for (let py = 0; py < panels; py++) {
+    const offset = py % 2 ? step / 2 : 0
+    for (let px = -1; px < panels; px++) {
+      const shade = 226 + Math.round((rand() - 0.5) * 18)
+      const x = px * step + offset
+      a.fillStyle = `rgb(${shade},${shade - 4},${shade - 12})`
+      a.fillRect(x + joint, py * step + joint, step - joint * 2, step - joint * 2)
+      const v = 128 + Math.round((rand() - 0.5) * 10)
+      h.fillStyle = `rgb(${v},${v},${v})`
+      h.fillRect(x + joint, py * step + joint, step - joint * 2, step - joint * 2)
     }
   }
 
-  // Seams. Cut into the height field so they read as gaps between plates, and drawn dark in
-  // the albedo so they still show at grazing angles where the normal map does little.
-  a.strokeStyle = 'rgba(40,44,50,0.85)'
-  a.lineWidth = seam
+  // A zellige inlay: one small diamond per tile, so the paving has a hand-laid accent.
+  const tile = size / 2
+  for (let i = 0; i < 2; i++) {
+    for (let j = 0; j < 2; j++) {
+      const cx = i * tile + tile / 2
+      const cy = j * tile + tile / 2
+      const r = tile * 0.09
+      a.fillStyle = (i + j) % 2 ? 'rgba(31,95,168,0.55)' : 'rgba(184,115,51,0.5)'
+      a.beginPath()
+      a.moveTo(cx, cy - r)
+      a.lineTo(cx + r, cy)
+      a.lineTo(cx, cy + r)
+      a.lineTo(cx - r, cy)
+      a.closePath()
+      a.fill()
+      h.fillStyle = '#9a9a9a'
+      dot(h, cx, cy, r * 0.7)
+    }
+  }
+
+  // Joints: dark lime mortar, cut into the height field.
+  a.strokeStyle = 'rgba(120,104,80,0.7)'
+  a.lineWidth = joint
   h.strokeStyle = '#3a3a3a'
-  h.lineWidth = seam
-  for (let i = 0; i <= panels; i++) {
+  h.lineWidth = joint
+  for (let j = 0; j <= panels; j++) {
     for (const ctx of [a, h]) {
       ctx.beginPath()
-      ctx.moveTo(i * step, 0)
-      ctx.lineTo(i * step, size)
-      ctx.moveTo(0, i * step)
-      ctx.lineTo(size, i * step)
+      ctx.moveTo(0, j * step)
+      ctx.lineTo(size, j * step)
       ctx.stroke()
     }
   }
 
-  // Bolt heads at the panel corners and along the seams — the detail the eye actually
-  // catches, so they get the strongest relief on the sheet.
-  const bolt = Math.max(2, size / 150)
-  for (let i = 0; i <= panels; i++) {
-    for (let j = 0; j <= panels; j++) {
-      for (const [ox, oy] of [
-        [0, 0],
-        [step / 2, 0],
-        [0, step / 2],
-      ]) {
-        const x = (i * step + ox) % size
-        const y = (j * step + oy) % size
-        a.fillStyle = 'rgba(198,203,209,0.85)'
-        dot(a, x, y, bolt)
-        h.fillStyle = '#e8e8e8'
-        dot(h, x, y, bolt)
-        // A touch of shadow under each, for the angles the normal map cannot reach.
-        a.fillStyle = 'rgba(30,32,38,0.35)'
-        dot(a, x + bolt * 0.5, y + bolt * 0.5, bolt * 0.8)
-      }
-    }
-  }
-
-  // Wear: a scatter of scuffs, so no two square metres of deck are identical.
-  for (let i = 0; i < size / 6; i++) {
+  // Wear: a scatter of scuffs, so no two square metres of paving are identical.
+  for (let i = 0; i < size / 5; i++) {
     const x = rand() * size
     const y = rand() * size
     const r = (0.6 + rand() * 2.4) * (size / 128)
-    a.fillStyle = rand() > 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.07)'
+    a.fillStyle = rand() > 0.5 ? 'rgba(255,255,255,0.08)' : 'rgba(90,70,40,0.07)'
     dot(a, x, y, r)
   }
 
@@ -120,7 +118,7 @@ export function deckSurface(size = 512) {
 }
 
 /**
- * The kerb that edges a plot: a lit strip, broken into dashes.
+ * The kerb that edges a workshop: a Bou Said blue painted strip.
  *
  * A solid glowing bar is a solid glowing bar; the same bar dashed reads as runway edge
  * lighting, which is what a landing apron should have. The emissive mask is separate from
@@ -142,26 +140,15 @@ export function kerbSurface(size = 128) {
   const height = canvas(size, h)
   const band = h / 2
 
-  // The strip: dark channel, white dashes, and a raised lip either side of them.
-  albedo.ctx.fillStyle = '#3c4148'
+  // The strip: Bou Said blue paint with a whitewashed line down the middle.
+  albedo.ctx.fillStyle = '#1f5fa8'
   albedo.ctx.fillRect(0, 0, size, band)
+  albedo.ctx.fillStyle = '#e9eef5'
+  albedo.ctx.fillRect(0, band * 0.44, size, band * 0.12)
   glow.ctx.fillStyle = '#000000'
   glow.ctx.fillRect(0, 0, size, h)
-  height.ctx.fillStyle = '#606060'
+  height.ctx.fillStyle = '#707070'
   height.ctx.fillRect(0, 0, size, band)
-
-  const dashes = 6
-  const pitch = size / dashes
-  const len = pitch * 0.62
-  for (let i = 0; i < dashes; i++) {
-    const x = i * pitch + (pitch - len) / 2
-    albedo.ctx.fillStyle = '#e9edf2'
-    albedo.ctx.fillRect(x, band * 0.22, len, band * 0.56)
-    glow.ctx.fillStyle = '#ffffff'
-    glow.ctx.fillRect(x, band * 0.22, len, band * 0.56)
-    height.ctx.fillStyle = '#d0d0d0'
-    height.ctx.fillRect(x, band * 0.18, len, band * 0.64)
-  }
 
   // The plain patch: near-white so the material's accent comes through at full strength,
   // unlit so the sides stay dark after nightfall, and flat so the normal map leaves them be.

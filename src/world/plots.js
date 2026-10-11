@@ -22,9 +22,26 @@ import { HEX_DIRS, SHIP_CELL, ORIGIN, POOL_RINGS, cellKey as key, hexDistance, i
  */
 
 export const PLOT_PALETTE = [
-  0xc96442, 0x4f9a63, 0x4f7ec9, 0xb8942a, 0x8b5cc9, 0xc94f8b,
-  0x3fa8a0, 0xc97f4f, 0x6f8f4f, 0x5c7fc9, 0xc95c5c, 0x7f6fc9,
+  0x1f5fa8, // Sidi Bou Said blue
+  0xa8322d, // chechia red
+  0xb87333, // copper
+  0x3f8f86, // dome-tile mint
+  0xd4a93a, // saffron
+  0x6b7a3a, // olive
+  0xc9667a, // rose petal
+  0x2f4f9a, // indigo
+  0xc97f4f, // terracotta
+  0x4a9bb5, // turquoise
+  0xe0803a, // orange blossom
+  0x8a4f6a, // fig
 ]
+
+/** The kit every prop on a plot comes from. */
+const KIT = 'medina'
+/** Lantern glass, warm copper-gold. Rescaled by the night level. */
+const LANTERN_GLOW = 0xffa050
+/** Paving: limestone, with a breath of the project's colour. */
+const LIMESTONE = 0xd9c7a3
 
 /** Hex size, centre to corner. Cells tile exactly at this radius. */
 const CELL = 7.6
@@ -436,7 +453,7 @@ export class Plot {
     // rather than compete with them — but its rim faces sideways, so whatever the top reads
     // as in full sun the edge reads as one stop darker, and a backdrop that goes to nothing
     // at the plot boundary just looks like a hole.
-    const color = new THREE.Color(this.accent).offsetHSL(0, -0.38, 0).multiplyScalar(0.9)
+    const color = new THREE.Color(LIMESTONE).lerp(new THREE.Color(this.accent), 0.1)
     const plate = deckSurface()
     this.deck = new THREE.Mesh(
       geo,
@@ -512,30 +529,33 @@ export class Plot {
     this.group.add(this.border)
   }
 
-  /** A lamp post on one corner of each cell — the plot's own night lighting. */
+  /** A copper lantern post on one corner of each cell: the plot's own night lighting. */
   _buildPosts() {
-    const posts = []
+    if (!hasPart('lantern_pole', KIT)) return
+    const poles = []
     const lamps = []
     this.localCenters.forEach(({ x, z }, i) => {
       const [px, pz] = corner(x, z, (i * 2) % 6, TILE * 0.72)
-      const pole = new THREE.CylinderGeometry(0.055, 0.085, 1.8, 6)
-      pole.translate(px, DECK_TOP + 0.9, pz)
-      posts.push(pole)
-      const head = new THREE.SphereGeometry(0.14, 8, 6)
-      head.translate(px, DECK_TOP + 1.84, pz)
-      lamps.push(head)
+      // The lantern hangs on an arm; turn the arm in toward the middle of the cell.
+      const yaw = Math.atan2(x - px, z - pz) - Math.PI / 2
+      for (const [name, list] of [['lantern_pole', poles], ['lantern_lamp', lamps]]) {
+        const geo = part(name, KIT)
+        geo.rotateY(yaw)
+        geo.translate(px, DECK_TOP, pz)
+        list.push(geo)
+      }
     })
 
     const poleMesh = new THREE.Mesh(
-      BufferGeometryUtils.mergeGeometries(posts),
-      new THREE.MeshStandardMaterial({ color: 0x9a9aa2, roughness: 0.7, metalness: 0.3 })
+      BufferGeometryUtils.mergeGeometries(poles),
+      new THREE.MeshStandardMaterial({ map: atlasTexture(KIT), roughness: 0.6, metalness: 0.1 })
     )
     poleMesh.castShadow = true
-    this.lampMaterial = new THREE.MeshBasicMaterial({ color: this.accent, toneMapped: true })
+    this.lampMaterial = new THREE.MeshBasicMaterial({ color: LANTERN_GLOW, toneMapped: true })
     this.lamps = new THREE.Mesh(BufferGeometryUtils.mergeGeometries(lamps), this.lampMaterial)
-    this._lampBase = new THREE.Color(this.accent)
+    this._lampBase = new THREE.Color(LANTERN_GLOW)
     this.group.add(poleMesh, this.lamps)
-    posts.forEach((g) => g.dispose())
+    poles.forEach((g) => g.dispose())
     lamps.forEach((g) => g.dispose())
   }
 
@@ -550,8 +570,8 @@ export class Plot {
    * Seeded off the plot's own name, so a repo's yard is laid out the same on every reload.
    */
   _buildClutter() {
-    const props = ['containers_A', 'containers_B', 'containers_C', 'containers_D', 'cargo_A', 'cargo_B', 'cargo_A_packed', 'cargo_B_packed', 'lights']
-    if (!props.every((n) => hasPart(n))) return
+    const props = ['pot_a', 'pot_plant', 'jar', 'rug', 'basket', 'crate', 'stool', 'rug', 'pot_a', 'basket']
+    if (!props.every((n) => hasPart(n, KIT))) return
 
     const rand = mulberry(hashString(this.id) + 17)
     const parts = []
@@ -572,8 +592,8 @@ export class Plot {
 
       for (const { a, r } of spots) {
         const name = props[Math.floor(rand() * props.length)]
-        const geo = part(name)
-        const s = name === 'lights' ? 1.1 : 1.35
+        const geo = part(name, KIT)
+        const s = 1.35
         geo.scale(s, s, s)
         geo.rotateY(rand() * Math.PI * 2)
         const px = x + Math.cos(a) * r
@@ -603,7 +623,7 @@ export class Plot {
     parts.forEach((g) => g.dispose())
     this.clutter = new THREE.Mesh(
       geo,
-      new THREE.MeshStandardMaterial({ map: atlasTexture(), roughness: 0.6, metalness: 0.05 })
+      new THREE.MeshStandardMaterial({ map: atlasTexture(KIT), roughness: 0.8, metalness: 0 })
     )
     this.clutter.castShadow = true
     this.clutter.receiveShadow = true
@@ -658,7 +678,7 @@ export class Plot {
       this.borderMaterial.emissiveIntensity =
         0.3 + night * 1.4 + (urgent ? 0.4 + Math.sin(elapsed * 3.4) * 0.32 : 0)
     }
-    this.lampMaterial.color.copy(this._lampBase).multiplyScalar(0.5 + night * 2.4)
+    this.lampMaterial?.color.copy(this._lampBase).multiplyScalar(0.5 + night * 2.4)
   }
 
   dispose() {

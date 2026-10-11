@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { withCurve } from '../core/curve.js'
+import { paintBodyGeometry, SASH_BLUE, SASH_BAND } from './attire.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 
@@ -160,10 +161,10 @@ function tweakClip(clip, table, key) {
 const CREW_URL = `${import.meta.env.BASE_URL}assets/crew.glb`
 
 /**
- * The mannequin's own head is left out of the body: the colony puts its own helmet, visor
- * and screen-face on the head bone instead, which is the whole of the astronaut's identity.
+ * Nothing is dropped: the mannequin's own head stays, painted copper-toned, and the chechia
+ * and face are worn on the head bone (see attire.js).
  */
-const DROP_MESHES = ['Mannequin_Medium_Head']
+const DROP_MESHES = []
 
 let loading = null
 let rig = null
@@ -243,6 +244,7 @@ function mergeBody(skinned, dropMeshes) {
       geo.setAttribute(name, new THREE.BufferAttribute(data, size))
     }
     if (src.index) geo.setIndex(Array.from(src.index.array))
+    paintBodyGeometry(mesh.name, geo)
     parts.push(geo)
   }
 
@@ -416,6 +418,9 @@ export function decorateSkinned(material, uniforms, { normals = true } = {}) {
          attribute vec4 skinIndex;
          attribute vec4 skinWeight;
          attribute float aFrame;
+         attribute float aTint;
+         varying float vSash;
+         varying float vBindY;
          uniform highp sampler2D uBones;
          uniform float uFrameMax;
 
@@ -453,6 +458,31 @@ export function decorateSkinned(material, uniforms, { normals = true } = {}) {
       )
 
     if (normals) {
+      // Fixed colours (skin, sash, shoes) ignore the per-artisan robe colour; robe vertices
+      // (aTint 1) take it. Only the lit pass has colours; the depth pass never sees them.
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <color_vertex>',
+        `#if defined( USE_COLOR ) || defined( USE_INSTANCING_COLOR )
+           vColor = vec4( 1.0 );
+         #endif
+         #ifdef USE_COLOR
+           vColor.rgb *= color;
+         #endif
+         #ifdef USE_INSTANCING_COLOR
+           vColor.rgb *= mix( vec3( 1.0 ), instanceColor.rgb, min( aTint, 1.0 ) );
+         #endif
+         vSash = step( 1.5, aTint );
+         vBindY = position.y;`
+      )
+      const sash = new THREE.Color(SASH_BLUE)
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', `#include <common>
+           varying float vSash;
+           varying float vBindY;`)
+        .replace('#include <color_fragment>', `#include <color_fragment>
+           float sashMask = vSash * ( smoothstep( ${SASH_BAND[0].toFixed(3)}, ${(SASH_BAND[0] + 0.015).toFixed(3)}, vBindY )
+             - smoothstep( ${SASH_BAND[1].toFixed(3)}, ${(SASH_BAND[1] + 0.015).toFixed(3)}, vBindY ) );
+           diffuseColor.rgb = mix( diffuseColor.rgb, vec3( ${sash.r.toFixed(4)}, ${sash.g.toFixed(4)}, ${sash.b.toFixed(4)} ), sashMask );`)
       // Three runs the normal stage first, so the matrix is built there and the position
       // stage reuses it — one set of texture fetches per vertex rather than two.
       shader.vertexShader = shader.vertexShader

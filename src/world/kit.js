@@ -28,20 +28,28 @@ export const ATLAS = { cols: 8, rows: 4 }
 /**
  * Cells worth naming. Everything else is structure and stays the colour Kay painted it.
  *
- * `TRIM` is the gold band that runs round the habitats, edges the airlocks and fills the
- * window strips — the one swatch that reads as "this building's colour", which is why it
+ * `TRIM` is the window glass and frieze of the medina atlas (was the gold band of the
+ * Space Base pack) — the one swatch that reads as "this building's colour", which is why it
  * is the one the accent replaces and the one that lights up after dark.
  */
 export const CELL = {
-  WHITE: 1,
-  GREY: 2,
-  SLATE: 3,
-  BLACK: 4,
-  ROCK: 7,
+  WHITE: 1, // whitewash
+  LIME: 2, // limestone
+  SHADE: 3,
+  DARK: 4, // doorway void
+  BLUE: 5, // Bou Said blue, doors and shutters
+  BLUE_DARK: 6,
+  TERRA: 7,
+  COPPER: 8,
+  LAMP: 9, // lantern glass
+  WOOD: 10,
   TRIM: 11,
-  RED: 12,
-  SOLAR_A: 28,
-  SOLAR_B: 29,
+  RED: 12, // chechia red
+  OLIVE: 13,
+  CREAM: 14,
+  MINT: 15,
+  IRON: 16,
+  STRAW: 17,
 }
 
 // Served straight out of `public/`, not bundled — a glb is opaque to Vite and there is
@@ -49,6 +57,8 @@ export const CELL = {
 const KITS = {
   /** Space Base Bits: every building, and the colony's hard surfaces. */
   base: { file: 'spacebase.glb', parts: new Map(), solo: new Map(), atlas: null },
+  /** The procedural medina (tools/build-medina.mjs): every building, prop and lantern. */
+  medina: { file: 'medina.glb', parts: new Map(), solo: new Map(), atlas: null },
   /** Forest Nature Pack: trees, bushes, grass, and the boulders on every world. */
   forest: { file: 'forest.glb', parts: new Map(), solo: new Map(), atlas: null },
   /**

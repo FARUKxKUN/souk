@@ -4,6 +4,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { withCurve } from '../core/curve.js'
 import { mulberry } from './planet.js'
 import { stepParcel } from './parcel-physics.js'
+import { Cats, Pigeons } from './streetlife.js'
 
 /**
  * The life layer: birds wheeling over the colony, butterflies in the scatter, fish leaping
@@ -1425,6 +1426,8 @@ const EMPTY = []
  *   butterflies: { count = 40, colors = a bright default set }
  *   fish:        { count = 10 }   — ignored unless the environment has a water level
  *   drones:      { count = 3 }
+ *   cats:        { count = 5, colors = a set of coats, radius = [5, 34] }   (streetlife.js)
+ *   pigeons:     { count = 8, radius = [5, 34] }   or   birds: { kind: 'pigeon', count }
  *
  * A missing key means none of that kind; a missing `fauna` means an empty layer.
  */
@@ -1442,6 +1445,8 @@ export class Fauna {
     this.meadow = null
     this.shoal = null
     this.fleet = null
+    this.cats = null
+    this.pigeons = null
 
     this._sites = { pad: { x: 0, y: 0, z: 0 }, door: { x: 0, y: 0, z: 0 }, sites: [] }
     this._tier = TIER[settings.get('fauna')] ?? 1
@@ -1465,6 +1470,15 @@ export class Fauna {
     }
     if (fauna.fish && env.waterLevel != null && (fauna.fish.count ?? 10) > 0) {
       this.shoal = new Shoal(this.group, fauna.fish, env, seed ^ 0x3d3f, this._tier)
+    }
+    // Street life for the souk. A preset can name the pigeon either as `pigeons` or as
+    // `birds: { kind: 'pigeon' }`; swallows and the rest stay a Flock.
+    if (fauna.cats && (fauna.cats.count ?? 5) > 0) {
+      this.cats = new Cats(this.group, fauna.cats, env, seed ^ 0x5a51, this._tier)
+    }
+    const pigeons = fauna.pigeons ?? (fauna.birds?.kind === 'pigeon' ? fauna.birds : null)
+    if (pigeons && (pigeons.count ?? 8) > 0) {
+      this.pigeons = new Pigeons(this.group, pigeons, env, seed ^ 0x6b62, this._tier)
     }
     if (fauna.drones && (fauna.drones.count ?? 3) > 0) {
       this.fleet = new Fleet(this.group, fauna.drones, env, seed ^ 0x4e40, this._tier)
@@ -1506,6 +1520,8 @@ export class Fauna {
     }
     this.shoal?.update(dt, elapsed, hooks, motion)
     this.fleet?.update(dt, elapsed, hooks, motion)
+    this.cats?.update(dt, elapsed, night, motion)
+    this.pigeons?.update(dt, elapsed, night, motion)
   }
 
   /** `{ x, y, z, busy }` per drone, reused frame to frame — for the rotor whine. */
@@ -1525,6 +1541,8 @@ export class Fauna {
       this.meadow?.setTier(this._tier)
       this.shoal?.setTier(this._tier)
       this.fleet?.setTier(this._tier)
+      this.cats?.setTier(this._tier)
+      this.pigeons?.setTier(this._tier)
     }
     if (changed.has('reducedMotion')) {
       this.motion = this.settings.get('reducedMotion') ? 0.5 : 1
@@ -1537,7 +1555,9 @@ export class Fauna {
     this.meadow?.dispose()
     this.shoal?.dispose()
     this.fleet?.dispose()
-    this.flock = this.meadow = this.shoal = this.fleet = null
+    this.cats?.dispose()
+    this.pigeons?.dispose()
+    this.flock = this.meadow = this.shoal = this.fleet = this.cats = this.pigeons = null
   }
 
   dispose() {

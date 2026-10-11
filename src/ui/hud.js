@@ -50,11 +50,11 @@ const ICON = {
 }
 
 const STAT_DEFS = [
-  { key: 'working', label: 'building', cls: 'working' },
+  { key: 'working', label: 'at work', cls: 'working' },
   { key: 'waiting', label: 'need you', cls: 'waiting' },
-  { key: 'blocked', label: 'blocked', cls: 'blocked' },
-  { key: 'celebrating', label: 'shipped', cls: 'done' },
-  { key: 'agents', label: 'bots', cls: 'idle' },
+  { key: 'blocked', label: 'stuck', cls: 'blocked' },
+  { key: 'celebrating', label: 'done', cls: 'done' },
+  { key: 'agents', label: 'artisans', cls: 'idle' },
 ]
 
 export class Hud {
@@ -94,7 +94,7 @@ export class Hud {
       b.className = `stat ${def.cls}`
       b.type = 'button'
       b.dataset.key = def.key
-      b.title = `Jump to the next ${def.label} bot`
+      b.title = `Jump to the next artisan: ${def.label}`
       b.innerHTML = `<i class="pip"></i><span class="n">0</span><span class="lbl">${def.label}</span>`
       b.type = 'button'
       b.addEventListener('click', () => this.actions.focusStatus?.(def.key))
@@ -125,7 +125,7 @@ export class Hud {
     const perf = group('Performance')
     perf.append(
       this._toggle('HDR + bloom', 'bloom', 'Glowing eyes, lamps and windows. The first thing to drop.'),
-      this._toggle('Tilt-shift', 'tiltShift', 'A shallow depth of field, which is what makes the colony read as a model.'),
+      this._toggle('Tilt-shift', 'tiltShift', 'A shallow depth of field, which is what makes the souk read as a model.'),
       this._slider(
         'Tilt-shift blur',
         'tiltShiftStrength',
@@ -178,13 +178,13 @@ export class Hud {
       ),
       this._toggle('Adaptive quality', 'autoQuality', 'Quietly drops render scale if frames get expensive.'),
       this._slider('Scatter', 'scatterDensity', 0, 1, 0.05, (v) => `${Math.round(v * 100)}%`),
-      this._slider('Max bots', 'maxAgents', 10, 200, 10, (v) => String(v)),
+      this._slider('Max artisans', 'maxAgents', 10, 200, 10, (v) => String(v)),
       this._toggle('Stars', 'stars')
     )
     body.appendChild(perf)
 
     // World.
-    const world = group('Planet')
+    const world = group('World')
     const planets = document.createElement('div')
     planets.className = 'planets'
     for (const id of PLANETS_ORDER) {
@@ -233,7 +233,7 @@ export class Hud {
       this._toggle(
         'Environment light',
         'ibl',
-        'Image-based lighting taken from this planet’s own sky. Metals get something to reflect.'
+        'Image-based lighting taken from this setting’s own sky. Metals get something to reflect.'
       ),
       this._slider('Environment', 'iblIntensity', 0, 2, 0.05, (v) => v.toFixed(2)),
       this._slider('Exposure', 'exposure', 0.4, 2, 0.05, (v) => v.toFixed(2)),
@@ -260,13 +260,13 @@ export class Hud {
     }
     view.append(
       this._toggle(
-        'Hide dormant repos',
+        'Hide asleep workshops',
         'hideDormant',
         'Takes a repo off the map when every thread in it has been quiet for three days. Its threads are untouched, and it comes back to the same ground the moment one wakes up.'
       )
     )
     view.append(
-      this._toggle('Follow selected bot', 'followSelected', 'Tracks the selected bot until you deselect. Drag to pan, right-drag to orbit, and scroll to zoom.'),
+      this._toggle('Follow selected artisan', 'followSelected', 'Tracks the selected artisan until you deselect. Drag to pan, right-drag to orbit, and scroll to zoom.'),
       this._toggle('Return to isometric', 'autoFrame', 'Eases the angle back when you stop dragging.'),
       this._slider('Field of view', 'fov', 20, 60, 1, (v) => `${v}°`),
       this._toggle('Project labels', 'showLabels'),
@@ -285,7 +285,7 @@ export class Hud {
         1,
         0.05,
         (v) => v === 0 ? 'Off' : `${Math.round(v * 100)}%`,
-        'Soft shading in creases and where surfaces meet. Try 20–35% for a subtle effect; 0 turns it off.'
+        'Soft shading in creases and where surfaces meet. Try 20-35% for a subtle effect; 0 turns it off.'
       ),
       this._slider(
         'World curve',
@@ -479,7 +479,7 @@ export class Hud {
   syncSettings() {
     const follow = Boolean(this.settings.get('followSelected'))
     this.$('#btn-follow').setAttribute('aria-pressed', String(follow))
-    this.$('#btn-follow').title = follow ? 'Stop following selected bot' : 'Follow selected bot'
+    this.$('#btn-follow').title = follow ? 'Stop following selected artisan' : 'Follow selected artisan'
     for (const c of this.controls) c.sync()
     this.$('.fps').classList.toggle('on', Boolean(this.settings.get('showFps')))
     const sound = Boolean(this.settings.get('sound'))
@@ -568,7 +568,7 @@ export class Hud {
       const show = document.createElement('button')
       show.type = 'button'
       show.className = 'btn ghost show-repo'
-      show.title = 'Put dormant repos back on the map'
+      show.title = 'Put asleep workshops back on the map'
       show.textContent = 'Show'
       show.addEventListener('click', () => this.settings.set('hideDormant', false))
       row.appendChild(show)
@@ -1066,7 +1066,7 @@ const TEMPLATE = `
 <aside class="side panel">
   <div class="grab"></div>
   <header class="brandbar">
-    <div class="brand"><i class="dot"></i>Bot Crossing</div>
+    <div class="brand"><i class="dot"></i>SOUK</div>
     <button class="btn icon ghost" id="btn-shot" title="Screenshot (P)">${ICON.camera}</button>
     <button class="btn icon ghost" id="btn-help" title="Help (?)">${ICON.help}</button>
     <button class="btn icon ghost" id="btn-hide" title="Hide all UI (H)">${ICON.eye}</button>
@@ -1095,7 +1095,7 @@ const TEMPLATE = `
           <div class="name"></div>
           <div class="path"></div>
         </div>
-        <button class="btn icon ghost" id="btn-locate" title="Fly to this zone">${ICON.locate}</button>
+        <button class="btn icon ghost" id="btn-locate" title="Fly to this workshop">${ICON.locate}</button>
       </div>
       <div class="project-actions">
         <button class="btn primary" id="btn-new-session" title="Start a new thread in this folder (C)">${ICON.plus} New conversation</button>
@@ -1103,7 +1103,7 @@ const TEMPLATE = `
           <button class="btn" id="btn-reveal" title="Show this folder in ${FILE_MANAGER}">${ICON.folder} ${FILE_MANAGER}</button>
           <button class="btn" id="btn-copy-path" title="Copy the folder path">${ICON.copy} Copy path</button>
         </div>
-        <button class="btn" id="btn-hide-project" title="Hide this repo from the colony — does not archive its threads">${ICON.eyeOff} Hide from colony</button>
+        <button class="btn" id="btn-hide-project" title="Hide this repo from the souk - does not archive its threads">${ICON.eyeOff} Hide from souk</button>
       </div>
       <div class="threads-head"></div>
       <div class="threads"></div>
@@ -1113,10 +1113,10 @@ const TEMPLATE = `
 
 <div class="rail panel">
   <button class="btn icon" id="btn-home" title="Reset the view (0)">${ICON.home}</button>
-  <button class="btn icon" id="btn-next" title="Next bot waiting on you (N)">${ICON.next}</button>
+  <button class="btn icon" id="btn-next" title="Next artisan waiting on you (N)">${ICON.next}</button>
   <div class="sep"></div>
-  <button class="btn icon" id="btn-orbit" title="Orbit mode — sweep around the colony (O)" aria-pressed="false">${ICON.orbit}</button>
-  <button class="btn icon" id="btn-planet" title="Change planet (Tab)">${ICON.globe}</button>
+  <button class="btn icon" id="btn-orbit" title="Orbit mode - sweep around the souk (O)" aria-pressed="false">${ICON.orbit}</button>
+  <button class="btn icon" id="btn-planet" title="Change setting (Tab)">${ICON.globe}</button>
   <button class="btn icon" id="btn-time" title="Change the time of day (L)">${ICON.sun}</button>
   <div class="sep"></div>
   <button class="btn icon" id="btn-sound" title="Mute (M)" aria-pressed="true">${ICON.sound}</button>
@@ -1135,14 +1135,14 @@ const TEMPLATE = `
       <div class="title"></div>
       <div class="meta"></div>
     </div>
-    <button class="btn icon ghost" id="btn-follow" title="Follow selected bot" aria-label="Follow selected bot" aria-pressed="false">${ICON.locate}</button>
+    <button class="btn icon ghost" id="btn-follow" title="Follow selected artisan" aria-label="Follow selected artisan" aria-pressed="false">${ICON.locate}</button>
     <button class="btn icon ghost" id="btn-deselect" title="Deselect (Esc)">${ICON.close}</button>
   </div>
   <div class="progress"><i></i></div>
   <div class="pair">
     <button class="btn primary" id="btn-open" title="Open this thread in the harness it came from (Enter)">${ICON.open} Open</button>
     <button class="btn" id="btn-viewed" title="Stop this thread asking for you until it moves on again (V)">${ICON.eye} Viewed</button>
-    <button class="btn" id="btn-archive" title="Archive — this bot walks back to the ship (A)">${ICON.archive} Archive</button>
+    <button class="btn" id="btn-archive" title="Archive - this artisan walks back out through the gate (A)">${ICON.archive} Archive</button>
   </div>
 </div>
 
@@ -1152,8 +1152,8 @@ const TEMPLATE = `
 
 <div class="help">
   <div class="sheet panel">
-    <h2>Bot Crossing</h2>
-    <p class="sub">Every coding-agent thread on this machine is a bot. They walk out of the ship, claim a plot for their repo, and build. Click one to open its thread; click a zone — its deck or its name — for the repo itself, and start a new conversation there. Hide a repo from that panel if you would rather not see it — its threads stay in your harness, and you can show it again from the list. Navigation works like Google Earth — drag the ground itself, right-drag to tilt, scroll to zoom in on whatever is under the cursor.</p>
+    <h2>SOUK</h2>
+    <p class="sub">Every coding-agent thread on this machine is an artisan. They walk in through the medina gate, claim a workshop for their repo, and get to work. Click one to open its thread; click a workshop - its paving or its name - for the repo itself, and start a new conversation there. Hide a repo from that panel if you would rather not see it - its threads stay in your harness, and you can show it again from the list. Navigation works like Google Earth: drag the ground itself, right-drag to tilt, scroll to zoom in on whatever is under the cursor.</p>
     <div class="cols">
       <div>
         <div class="k"><span>Drag the ground</span><kbd>drag</kbd></div>
@@ -1173,7 +1173,7 @@ const TEMPLATE = `
         <div class="k"><span>Archive</span><kbd>A</kbd></div>
         <div class="k"><span>New conversation</span><kbd>C</kbd></div>
         <div class="k"><span>Orbit mode</span><kbd>O</kbd></div>
-        <div class="k"><span>Change planet</span><kbd>Tab</kbd></div>
+        <div class="k"><span>Change setting</span><kbd>Tab</kbd></div>
         <div class="k"><span>Time of day</span><kbd>L</kbd></div>
         <div class="k"><span>Mute</span><kbd>M</kbd></div>
         <div class="k"><span>Deselect</span><kbd>Esc</kbd></div>
@@ -1181,11 +1181,11 @@ const TEMPLATE = `
       </div>
     </div>
     <div style="margin-top:16px">
-      <div class="legend-row"><i class="badge" style="background:#1a2b46;color:#8fb4ee">?</i> waiting on your reply — click to open the thread</div>
-      <div class="legend-row"><i class="badge" style="background:#3d1c1c;color:#e88b8b">!</i> the session hit an error</div>
-      <div class="legend-row"><i class="badge" style="background:#16301f;color:#7fd39a">⚒</i> running right now, building</div>
-      <div class="legend-row"><i class="badge" style="background:#332b12;color:#e6c67f">✓</i> its pull request landed</div>
-      <div class="legend-row"><i class="badge" style="background:#1d1f2e;color:#a9a8c0">z</i> nothing for three days</div>
+      <div class="legend-row"><i class="badge" style="background:#1a2b46;color:#8fb4ee">?</i> waiting on your reply - click to open the thread</div>
+      <div class="legend-row"><i class="badge" style="background:#4a2226;color:#f0a0a0">!</i> the session hit an error</div>
+      <div class="legend-row"><i class="badge" style="background:#2a3a1c;color:#b4d68a">⚒</i> running right now, at work</div>
+      <div class="legend-row"><i class="badge" style="background:#4a3418;color:#f0c88a">✓</i> its pull request landed</div>
+      <div class="legend-row"><i class="badge" style="background:#262a4a;color:#b4b8d4">z</i> nothing for three days</div>
     </div>
     <div style="margin-top:18px;display:flex;justify-content:flex-end">
       <button class="btn primary" id="btn-help-close">Got it</button>

@@ -11,6 +11,7 @@ them in the public domain.
 | `crew.glb` | [KayKit : Character Animations](https://kaylousberg.itch.io/kaykit-character-animations) | CC0 1.0 |
 | `forest.glb` | [KayKit : Forest Nature Pack](https://kaylousberg.itch.io/kaykit-forest) | CC0 1.0 |
 | `nature.glb` | [Nature Kit](https://kenney.nl/assets/nature-kit) by **[Kenney](https://kenney.nl)** — palms, cacti, pines, autumn and jungle trees, recoloured and vertex-baked by `tools/build-nature.mjs` | CC0 1.0 |
+| `medina.glb` | Procedurally generated in-repo by `tools/build-medina.mjs` (geometry and atlas both made in code, no external source) | ours, MIT |
 
 CC0 requires nothing of you. Crediting Kay and Kenney costs nothing either.
 

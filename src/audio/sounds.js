@@ -1,4 +1,8 @@
-import { GENERATORS } from './synth.js'
+import { GENERATORS as BASE_GENERATORS } from './synth.js'
+import { SOUK_GENERATORS } from './synth-souk.js'
+
+/** The souk's recipes override the base ones where a name is shared (the re-voiced replies). */
+const GENERATORS = { ...BASE_GENERATORS, ...SOUK_GENERATORS }
 
 /**
  * Every sound the colony can make, by name.
@@ -20,6 +24,9 @@ import { GENERATORS } from './synth.js'
 
 const TABLE = {
   // Beds — a planet stacks two or three of these.
+  /** The souk: a market at a distance, and a courtyard fountain. */
+  'souk-crowd': { kind: 'bed', gain: 1 },
+  'fountain': { kind: 'bed', gain: 1 },
   'wind-soft': { kind: 'bed', gain: 1 },
   'wind-desert': { kind: 'bed', gain: 1 },
   'wind-arctic': { kind: 'bed', gain: 1 },
@@ -62,6 +69,11 @@ const TABLE = {
   'bird-call': { kind: 'event', gain: 0.8 },
   /** A soft servo click and a thud — something small just landed. */
   'drone-drop': { kind: 'event', gain: 0.7 },
+  /** The souk's small life: a pigeon's coo, a cat's mew, a cart on the cobbles, copperwork far off. */
+  'pigeon': { kind: 'event', gain: 0.6 },
+  'cat-mew': { kind: 'event', gain: 0.5 },
+  'cart-wheels': { kind: 'event', gain: 0.7 },
+  'copper-tink': { kind: 'event', gain: 0.6 },
   /**
    * "Yes?" — what an astronaut says when you click it. Six of them, picked at random, so a
    * crowd does not answer in one voice. Little robot phrases: two or three chirps.

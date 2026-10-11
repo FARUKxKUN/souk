@@ -11,6 +11,12 @@ import { curveUniforms } from '../core/curve.js'
  * settings genuinely stops all of it rather than just hiding the result.
  */
 
+/** Copper sparks, and the occasional white-hot one. Linear RGB. */
+const SPARK_COPPER = new THREE.Color(1.0, 0.5, 0.16)
+const SPARK_HOT = new THREE.Color(1.0, 0.86, 0.55)
+/** Celebration bits: rose petals and jasmine. Linear, additive, so kept below white. */
+const PETALS = [new THREE.Color(1.0, 0.32, 0.4), new THREE.Color(0.95, 0.55, 0.62), new THREE.Color(1.0, 0.95, 0.8), new THREE.Color(1.0, 0.98, 0.9)]
+
 const GRAVITY = -3.6
 
 /**
@@ -241,6 +247,8 @@ export class Particles {
     if (!this.enabled) return
     const n = this.settings.get('particles') === 'full' ? 3 : 1
     for (let i = 0; i < n; i++) {
+      // Struck copper: the caller's colour is ignored, a spark is orange with the odd white-hot one.
+      const spark = Math.random() < 0.2 ? SPARK_HOT : SPARK_COPPER
       const a = Math.random() * Math.PI * 2
       const s = 0.9 + Math.random() * 2.4
       this.glow.spawn(
@@ -250,9 +258,9 @@ export class Particles {
         Math.cos(a) * s * 0.5,
         1.1 + Math.random() * 2.2,
         Math.sin(a) * s * 0.5,
-        color.r * 2.4,
-        color.g * 2.2,
-        color.b * 1.6,
+        spark.r * 2.4,
+        spark.g * 2.2,
+        spark.b * 1.6,
         0.055 + Math.random() * 0.05,
         0.35 + Math.random() * 0.5,
         1.6,
@@ -291,6 +299,7 @@ export class Particles {
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2
       const s = 0.6 + Math.random() * 1.6
+      const petal = PETALS[Math.floor(Math.random() * PETALS.length)]
       this.glow.spawn(
         x,
         y + 0.8,
@@ -298,9 +307,9 @@ export class Particles {
         Math.cos(a) * s,
         2.4 + Math.random() * 2.4,
         Math.sin(a) * s,
-        color.r * (1.4 + Math.random()),
-        color.g * (1.4 + Math.random()),
-        color.b * (1.4 + Math.random()),
+        petal.r * (0.9 + Math.random() * 0.5),
+        petal.g * (0.9 + Math.random() * 0.5),
+        petal.b * (0.9 + Math.random() * 0.5),
         0.07 + Math.random() * 0.07,
         1.1 + Math.random() * 0.9,
         0.7,

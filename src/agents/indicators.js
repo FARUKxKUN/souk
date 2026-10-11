@@ -25,7 +25,7 @@ import {
 const COLS = 4
 const ROWS = 2
 
-/** Where the badge's bottom edge sits: a shade above the crown of the helmet. */
+/** Where the badge's bottom edge sits: a shade above the crown of the chechia. */
 const HEAD_CLEAR = 1.42
 
 export const BADGE = {
@@ -42,13 +42,13 @@ export const BADGE = {
 
 /** HDR badge tint, tone-mapped with the scene after bloom and depth of field. */
 const BADGE_COLOR = {
-  0: [0.42, 1.35, 2.9],
+  0: [3.4, 2.0, 0.35], // warm lantern gold: the one colour nothing else in the souk uses
   1: [2.9, 0.6, 0.5],
   2: [0.4, 1.9, 0.95],
   3: [1.5, 2.4, 0.8],
-  4: [2.5, 1.9, 0.65],
+  4: [1.6, 1.45, 1.1],
   5: [0.9, 1.0, 1.7],
-  6: [2.4, 1.4, 0.75],
+  6: [1.9, 1.9, 1.5],
   7: [1.2, 1.3, 1.35],
 }
 

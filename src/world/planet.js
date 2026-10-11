@@ -28,6 +28,46 @@ import { withCurve } from '../core/curve.js'
 const DRONES = { count: 3 }
 
 export const PLANETS = {
+  medina: {
+    id: 'medina',
+    name: 'Medina',
+    blurb: 'Sun-bleached limestone, blue doors, a warm lantern night.',
+    ground: { low: 0xd9c7a3, high: 0xeee4d0, tint: 0xf4ead4 },
+    // Limestone on the walls' neutral swatches: the kit leans warm-white here.
+    buildingTint: 0xf4f1ea,
+    rock: 0xc9b48c,
+    horizon: 0xf2dcb8,
+    sky: { top: 0x3f7fc9, bottom: 0xf2dcb8 },
+    fog: { color: 0xf0dfc2, near: 95, far: 240 },
+    sun: { color: 0xfff0d6, intensity: 2.6, night: 0.1 },
+    ambient: { sky: 0xb4d0ee, ground: 0xb89870, intensity: 0.95 },
+    atmosphere: 0.8,
+    craters: 0,
+    roughness: 0.55,
+    shape: 'plain',
+    scatter: 'medina',
+    companion: { name: 'Moon', color: 0xf3ead4, size: 2.4, glow: 0xffe9c0 },
+    dust: 0.3,
+    weather: [{ kind: 'pollen', rate: 0.15 }],
+    clouds: { amount: 0.08, color: 0xffffff, speed: 0.8 },
+    // souk fauna: cat, pigeon (wired later)
+    fauna: {
+      birds: { kind: 'swallow', count: 4, altitude: [8, 15], colors: [0x6a6a72, 0x8a8a92], size: 0.8 },
+    },
+    audio: {
+      beds: [
+        { sound: 'souk-crowd', gain: 0.6 },
+        { sound: 'fountain', gain: 1 },
+      ],
+      events: [
+        { sound: 'pigeon', every: [20, 60], gain: 1, when: 'day', where: 'ring' },
+        { sound: 'cart-wheels', every: [45, 120], gain: 1, when: 'day', where: 'ring' },
+        { sound: 'copper-tink', every: [40, 120], gain: 1, where: 'ring' },
+        { sound: 'cat-mew', every: [90, 240], gain: 0.8, when: 'night', where: 'ring' },
+      ],
+    },
+    grade: { saturation: 1.06, warmth: 0.25 },
+  },
   moon: {
     id: 'moon',
     name: 'Luna',
@@ -530,7 +570,7 @@ export const PLANETS = {
 }
 
 /** Display order for the picker: home first, then outward, then the pretty ones. */
-export const PLANET_ORDER = ['moon', 'mars', 'terra', 'beach', 'ocean', 'jungle', 'desert', 'tundra', 'autumn', 'sakura', 'volcanic', 'sky']
+export const PLANET_ORDER = ['medina', 'moon', 'mars', 'terra', 'beach', 'ocean', 'jungle', 'desert', 'tundra', 'autumn', 'sakura', 'volcanic', 'sky']
 
 export const GROUND_SIZE = 340
 /** Everything inside this radius is the buildable colony, and is kept nearly flat. */
@@ -851,6 +891,17 @@ const SCATTER = {
     { part: 'Rock_2_G_Color1', weight: 1, size: [0.3, 0.7], sink: 0.25, tint: true },
     { part: 'Rock_3_L_Color1', weight: 2, size: [0.4, 0.9], sink: 0.12, tint: true },
     { part: 'Rock_3_Q_Color1', weight: 1, size: [0.25, 0.55], sink: 0.1, tint: true },
+  ],
+  medina: [
+    { part: 'tree_palm', kit: N, weight: 2, size: [1.5, 2.3], sink: 0.03, upright: true },
+    { part: 'tree_palmShort', kit: N, weight: 2, size: [1.3, 2.0], sink: 0.03, upright: true },
+    { part: 'tree_palmDetailedTall', kit: N, weight: 1, size: [1.6, 2.4], sink: 0.03, upright: true },
+    { part: 'Tree_4_C_Color1', weight: 2, size: [0.22, 0.38], sink: 0.02, upright: true },
+    { part: 'Tree_3_C_Color1', weight: 2, size: [0.22, 0.38], sink: 0.02, upright: true },
+    { part: 'Bush_3_B_Color1', weight: 2, size: [0.4, 0.8], sink: 0.06, upright: true },
+    { part: 'rock_smallC', kit: N, weight: 2, size: [1.4, 2.6], sink: 0.2, tint: true },
+    { part: 'Rock_1_D_Color1', weight: 2, size: [0.4, 0.9], sink: 0.3, tint: true },
+    { part: 'Rock_3_L_Color1', weight: 1, size: [0.4, 0.8], sink: 0.12, tint: true },
   ],
   desert: [
     { part: 'cactus_tall', kit: N, weight: 4, size: [1.4, 2.4], sink: 0.03, upright: true },
