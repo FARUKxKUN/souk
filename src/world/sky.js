@@ -143,6 +143,10 @@ const SHADOW_EXTENT = 30
  * the frustum edge for edges that hold still.
  */
 const SHADOW_SNAP = 2
+/** Longest the environment map may go between refreshes while the sky is drifting on its own. */
+const ENV_DRIFT_MS = 2000
+/** Seconds between environment refreshes for drifting clouds, which move too slowly to light anything. */
+const CLOUD_ENV_SECONDS = 15
 
 /** A white crescent on transparent, tinted by the material colour. */
 function crescentTexture() {
@@ -224,7 +228,11 @@ export class Sky {
       return
     }
     const now = performance.now()
-    if (!force && (!this._envDirty || now - this._envAt < 220)) return
+    // A slider drag wants the light to follow the thumb; a sky that is merely drifting (the clock
+    // or the day cycle moving it a hair a frame) does not, and re-prefiltering four times a second
+    // for a change nobody can see is the most expensive thing the sky does.
+    const drifting = this.settings.get('autoTime') || this.settings.get('clockTime')
+    if (!force && (!this._envDirty || now - this._envAt < (drifting ? ENV_DRIFT_MS : 220))) return
     this._envDirty = false
     this._envAt = now
 
@@ -581,7 +589,7 @@ export class Sky {
     // the prefilter is refreshed on its own throttle rather than every frame.
     if (this.domeUniforms.uCloudAmount.value > 0) {
       this.domeUniforms.uCloudTime.value = elapsed * (this.cloudSpeed ?? 1)
-      if (elapsed - (this._cloudEnvAt || 0) > 2.5) {
+      if (elapsed - (this._cloudEnvAt || 0) > CLOUD_ENV_SECONDS) {
         this._cloudEnvAt = elapsed
         this._envDirty = true
       }

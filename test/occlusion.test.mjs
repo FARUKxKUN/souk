@@ -71,7 +71,7 @@ test('AO alone enables postprocessing, strength is bounded, and render failures 
 test('saved lightweight presets stay off, and the AO slider emits only a render change', () => {
   const previous = globalThis.localStorage
   try {
-    for (const [stored, expected] of [[{ preset: 'low' }, 0], [{ preset: 'potato' }, 0], [{ preset: 'balanced' }, 0.25], [{ preset: 'low', ambientOcclusion: 0.6 }, 0.6]]) {
+    for (const [stored, expected] of [[{ preset: 'low' }, 0], [{ preset: 'potato' }, 0], [{ preset: 'balanced' }, 0], [{ preset: 'high' }, 0.25], [{ preset: 'low', ambientOcclusion: 0.6 }, 0.6]]) {
       globalThis.localStorage = { getItem: () => JSON.stringify(stored), setItem() {} }
       const settings = new Settings()
       assert.equal(settings.get('ambientOcclusion'), expected)

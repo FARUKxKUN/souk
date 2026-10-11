@@ -34,6 +34,26 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
 
 /** The widest the blur ever gets, as a share of frame height, at full strength. */
 const MAX_RADIUS = 0.02
+/** Pixels of blur radius one tap can cover without the kernel showing its samples. */
+const PIXELS_PER_STEP = 1.25
+const MIN_STEPS = 3
+const MAX_STEPS = 8
+/**
+ * Up to this blur radius, in pixels, one pass gathering from a fixed 8-tap spiral does the
+ * work of two gaussian passes. The default softness is about four pixels, which is far below
+ * where a disc kernel shows its samples; stronger settings fall back to the separable pair.
+ */
+const DISC_MAX_RADIUS = 6
+const DISC_TAPS = 8
+/** A golden-angle spiral over the unit disc, as a GLSL constant so there is no trig per tap. */
+const DISC_TABLE = Array.from({ length: DISC_TAPS }, (_, i) => {
+  const r = Math.sqrt((i + 0.5) / DISC_TAPS)
+  const a = i * 2.399963
+  return `vec2( ${(Math.cos(a) * r).toFixed(4)}, ${(Math.sin(a) * r).toFixed(4)} )`
+}).join(', ')
+
+/** Taps per side for a blur radius in pixels. The default softness (about 4px) needs four. */
+export const stepsFor = (radius) => Math.max(MIN_STEPS, Math.min(MAX_STEPS, Math.ceil(radius / PIXELS_PER_STEP)))
 
 const common = {
   uniforms: {
@@ -44,6 +64,8 @@ const common = {
     uAxis: { value: new THREE.Vector2(1, 0) },
     /** Blur radius in pixels for a pixel fully out of focus. */
     uMaxRadius: { value: 8 },
+    /** Taps per side, chosen from the radius: see stepsFor. */
+    uSteps: { value: 8 },
     /** Distance from the camera to the plane of focus, in world units. */
     uFocusDistance: { value: 30 },
     /** How far from that plane a pixel has to be before it is blurred as hard as it gets. */
@@ -68,6 +90,7 @@ const common = {
     uniform vec2 uTexel;
     uniform vec2 uAxis;
     uniform float uMaxRadius;
+    uniform float uSteps;
     varying vec2 vUv;
 
     #ifdef COC_FROM_DEPTH
@@ -115,11 +138,12 @@ const common = {
     #endif
 
     /**
-     * Taps per side. Spacing is the radius over this, so the kernel stays properly sampled
-     * at every radius rather than the taps drifting apart as the blur widens — which is what
-     * turns a blur into visible copies of the picture.
+     * Taps per side, at most MAX_STEPS. Spacing is the radius over the count, so the kernel stays
+     * properly sampled at every radius rather than the taps drifting apart as the blur widens - which
+     * is what turns a blur into visible copies of the picture. The count itself follows the radius
+     * (see stepsFor): a four pixel blur does not need sixteen samples.
      */
-    const int STEPS = 8;
+    const int MAX_STEPS = 8;
 
     void main() {
       #ifdef COC_FROM_DEPTH
@@ -137,12 +161,23 @@ const common = {
         return;
       }
 
+      #ifdef DISC_BLUR
+        const vec2 DISC[ ${DISC_TAPS} ] = vec2[ ${DISC_TAPS} ]( ${DISC_TABLE} );
+        vec3 acc = texture2D( tDiffuse, vUv ).rgb;
+        for ( int i = 0; i < ${DISC_TAPS}; i++ ) {
+          acc += texture2D( tDiffuse, vUv + DISC[ i ] * radius * uTexel ).rgb;
+        }
+        gl_FragColor = vec4( acc / ${DISC_TAPS + 1}.0, COC_OUT );
+        return;
+      #endif
+
       vec2 unit = uAxis * uTexel;
       vec4 sum = texture2D( tDiffuse, vUv );
       float weight = 1.0;
 
-      for ( int i = 1; i <= STEPS; i++ ) {
-        float fraction = float( i ) / float( STEPS );
+      for ( int i = 1; i <= MAX_STEPS; i++ ) {
+        if ( float( i ) > uSteps ) break;
+        float fraction = float( i ) / uSteps;
         float offset = fraction * radius;
         // Sigma is radius/3: the radius cancels out of the Gaussian exponent. These
         // weights are constant, so the compiler can fold them instead of doing eight
@@ -159,18 +194,29 @@ const common = {
 }
 
 /**
- * The pair of passes, already oriented and already told which of them owns the depth read.
- * Kept together so the caller sets a size, a strength or a focus once and both halves agree —
+ * The passes, already oriented and already told which of them owns the depth read.
+ * Kept together so the caller sets a size, a strength or a focus once and every pass agrees —
  * a horizontal pass blurring harder than the vertical one reads as smearing, not as defocus.
+ *
+ * There are two ways to blur and only one is ever on. A soft blur (the default) is a single
+ * disc-gather pass. A strong one is the separable pair: the first computes the blur amount and
+ * hands it on in alpha, the second consumes it.
  */
 export function createTiltShift() {
-  // The first pass computes the blur amount and hands it on in alpha; the second consumes it.
+  const disc = new ShaderPass({ ...common, defines: { COC_FROM_DEPTH: '', COC_OUT: '1.0', DISC_BLUR: '' } })
   const horizontal = new ShaderPass({ ...common, defines: { COC_FROM_DEPTH: '', COC_OUT: 'coc' } })
   const vertical = new ShaderPass({ ...common, defines: { COC_OUT: '1.0' } })
   horizontal.uniforms.uAxis.value.set(1, 0)
   vertical.uniforms.uAxis.value.set(0, 1)
 
-  const passes = [horizontal, vertical]
+  const passes = [disc, horizontal, vertical]
+  let on = true
+  const syncEnabled = (radius) => {
+    const soft = radius <= DISC_MAX_RADIUS
+    disc.enabled = on && soft
+    horizontal.enabled = on && !soft
+    vertical.enabled = on && !soft
+  }
   const set = (name, value) => {
     for (const p of passes) p.uniforms[name].value = value
   }
@@ -181,6 +227,8 @@ export function createTiltShift() {
 
   const applyDerived = () => {
     set('uMaxRadius', amount * MAX_RADIUS * frameHeight)
+    set('uSteps', stepsFor(amount * MAX_RADIUS * frameHeight))
+    syncEnabled(amount * MAX_RADIUS * frameHeight)
     set('uFocusDistance', focusDistance)
     // The sharp slab is a share of how far away you are focused rather than a fixed depth,
     // so pulling the camera back does not drop the whole colony out of focus at once. Turning
@@ -191,14 +239,16 @@ export function createTiltShift() {
 
   return {
     passes,
-    set enabled(on) {
-      for (const p of passes) p.enabled = on
+    set enabled(value) {
+      on = Boolean(value)
+      syncEnabled(amount * MAX_RADIUS * frameHeight)
     },
     get enabled() {
-      return horizontal.enabled
+      return on
     },
     /** The depth the scene was drawn with — see the note about which pass may read it. */
     setDepthTexture(texture) {
+      disc.uniforms.tDepth.value = texture
       horizontal.uniforms.tDepth.value = texture
     },
     /** 0..1, where 1 is `MAX_RADIUS` of frame height and the shallowest focus. */

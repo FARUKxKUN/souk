@@ -118,7 +118,9 @@ export class SceneryReflections {
   update(dt, focus, camera) {
     if (!this.renderer) return
     this.clock += Math.min(Math.max(dt, 0), 0.1)
-    if (!this.settings.get('ibl')) {
+    // The cube capture re-renders the whole scene six times per refresh, which is a lot to ask of a
+    // small GPU for a glint on a visor, so it has its own switch apart from image-based lighting.
+    if (!this.settings.get('ibl') || this.settings.get('reflections') === false) {
       if (this.targets) this._release()
       return
     }

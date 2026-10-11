@@ -1,6 +1,7 @@
 import { SceneryReflections } from '../world/reflections.js'
 import * as THREE from 'three'
-import { PLANETS, createTerrain, createScatter, terrainHeight } from '../world/planet.js'
+import { PLANETS, createTerrain, createScatter, terrainHeight, worldSpec } from '../world/planet.js'
+import { createRampart } from '../world/rampart.js'
 import { createWater } from '../world/water.js'
 import { Fauna } from '../world/fauna.js'
 import { BuildingSurfaces } from '../world/building-surfaces.js'
@@ -130,6 +131,8 @@ export class Colony {
     this.renderer = renderer
 
     this.planet = PLANETS[settings.get('planet')] || PLANETS.medina
+    /** How much world is drawn and how far the camera may look at it - see worldSpec(). */
+    this.world = worldSpec(this.planet)
     this._applyPlanetTint()
     this.sky = new Sky(scene, settings, renderer)
     this.sky.setPlanet(this.planet)
@@ -171,7 +174,7 @@ export class Colony {
     this.reflections = new SceneryReflections({
       scene, renderer, settings, sky: this.sky, astronauts: this.astronauts,
       excluded: () => [this.labelGroup, this.indicators.mesh, this.particles.points,
-        this.fauna.group, this.grass?.mesh],
+        this.fauna.group, this.grass?.mesh, this.scatterGroup],
     })
     /** Set by whoever owns the speakers: (name, x, y, z) for a sound the world just made. */
     this.onSound = null
@@ -210,8 +213,10 @@ export class Colony {
 
     // An island world is shaped around the colony: the coast has to know the cells first.
     if (this.planet.shape === 'island') setIslandFootprint(this._footprintCells(), PLOT_CELL)
-    this.terrain = createTerrain(this.planet, this.settings.get('groundDetail'))
+    this.world = worldSpec(this.planet, this._footprintRadius())
+    this.terrain = createTerrain(this.planet, this.settings.get('groundDetail'), undefined, this.world)
     this.worldGroup.add(this.terrain)
+    this._buildRampart()
     this._buildIsland()
     this._buildWater()
     this._buildScatter()
@@ -242,6 +247,24 @@ export class Colony {
       })
     }
     this._syncFaunaSites()
+  }
+
+  /**
+   * The wall that closes a walled world's horizon. One merged mesh, rebuilt only when the
+   * terrain is - which is when the colony has grown past the wall's current ring.
+   */
+  _buildRampart() {
+    if (this.rampart) {
+      this.worldGroup.remove(this.rampart.mesh)
+      this.rampart.dispose()
+      this.rampart = null
+    }
+    if (!this.world.closed) return
+    this.rampart = createRampart({
+      radius: this.world.rampart,
+      heightAt: (x, z) => terrainHeight(x, z, this.planet),
+    })
+    if (this.rampart) this.worldGroup.add(this.rampart.mesh)
   }
 
   /** Where the drones fly between: the lander, and every building with anyone at it. */
@@ -393,7 +416,7 @@ export class Colony {
     }
     const ship = shipPosition()
     clear.push({ x: ship.x, z: ship.z, r: 7.5 })
-    this.scatterGroup = createScatter(this.planet, this.settings.get('scatterDensity'), clear, 4242, (x, z) => this.onIsland(x, z))
+    this.scatterGroup = createScatter(this.planet, this.settings.get('scatterDensity'), clear, 4242, (x, z) => this.onIsland(x, z), this.world)
     this.worldGroup.add(this.scatterGroup)
     this._scatterFootprint = this._plotFootprint()
     this._buildGrass(clear)
@@ -445,6 +468,7 @@ export class Colony {
     const planet = PLANETS[id]
     if (!planet || planet === this.planet) return
     this.planet = planet
+    this.world = worldSpec(planet)
     this.reflections.invalidate()
     this._applyPlanetTint()
     this.sky.setPlanet(planet)
@@ -664,7 +688,9 @@ export class Colony {
     // nor, on a floating island, the rock under them; and on an island in the sea, the
     // coast itself moves, which is the whole terrain.
     if (this.scatterGroup && this._plotFootprint() !== this._scatterFootprint) {
-      if (this.planet.shape === 'island') this._buildTerrain()
+      // A colony that has grown past its wall needs a bigger one, and ground to go with it.
+      const outgrown = this.world.closed && worldSpec(this.planet, this._footprintRadius()).rampart !== this.world.rampart
+      if (this.planet.shape === 'island' || outgrown) this._buildTerrain()
       else {
         this._buildScatter()
         if (this.island) this._syncIslandRock()

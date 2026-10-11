@@ -44,7 +44,19 @@ export const PLANETS = {
       night: { top: 0x141a3a, bottom: 0x232d5c },
       dusk: 0xc8703a,
     },
-    fog: { color: 0xcfdcea, near: 110, far: 300 },
+    // Closer than the open worlds: the rampart ring closes the view, so haze only has to
+    // soften the wall and the fade-out beyond it, and the colony itself stays crisp at any zoom.
+    fog: { color: 0xcfdcea, near: 95, far: 210 },
+    // A walled quarter, not an open plain: see worldSpec().
+    world: {
+      rampart: { radius: 66, margin: 14, apron: 26, step: 6 },
+      flatRadius: 86,
+      scatterInset: 5,
+      scatterShare: 0.6,
+      farDarken: 0.16,
+      camera: { maxDist: 1.6, targetLimit: 0.62, minTargetLimit: 30, maxPolarDeg: 78 },
+      far: 460,
+    },
     sun: { color: 0xfff1da, intensity: 2.0, night: 0.1 },
     // Cool sky fill so shadows run slightly blue; at night a moonlit blue-grey carries the whitewash.
     ambient: {
@@ -592,6 +604,55 @@ export const GROUND_SIZE = 340
 export const COLONY_RADIUS = 46
 const DETAIL_SEGMENTS = { low: 72, medium: 128, high: 190 }
 
+/** What an open world gets: the ground it always had, scatter to the far hills, the full zoom. */
+const OPEN_WORLD = Object.freeze({
+  closed: false,
+  rampart: 0,
+  groundSize: GROUND_SIZE,
+  scatterReach: 159,
+  scatterShare: 1,
+  farDarken: 0.55,
+  fadeStart: Infinity,
+  fadeEnd: Infinity,
+  maxDist: 150,
+  targetLimit: 82,
+  maxPolar: (84 * Math.PI) / 180,
+  far: 900,
+})
+
+/**
+ * How much world a planet draws, and how far the camera may look at it.
+ *
+ * Most of what made the souk slow was ground nobody looks at: a 340m plane, scatter thrown out
+ * to 160m, a horizon with palms on it. A planet with a `world` block is *closed* instead -
+ * a rampart ring just outside the colony, ground that fades into haze a little way past it,
+ * scatter only inside the wall, and a camera that cannot back off far enough to see past it.
+ *
+ * The wall radius follows the colony: `footprint` is the farthest a hex cell reaches from the
+ * middle, and the wall stands a margin beyond it (in steps, so a growing colony rebuilds the
+ * ground once per step and not once per plot). A planet without a `world` is returned as-is.
+ */
+export function worldSpec(planet, footprint = 0) {
+  const w = planet.world
+  if (!w) return OPEN_WORLD
+  const { radius, margin, apron, step } = w.rampart
+  const wall = Math.max(radius, Math.ceil((footprint + margin) / step) * step)
+  return Object.freeze({
+    closed: true,
+    rampart: wall,
+    groundSize: 2 * (wall + apron),
+    scatterReach: wall - w.scatterInset,
+    scatterShare: w.scatterShare,
+    farDarken: w.farDarken,
+    fadeStart: wall + 5,
+    fadeEnd: wall + apron - 2,
+    maxDist: Math.max(100, Math.round(wall * w.camera.maxDist)),
+    targetLimit: Math.max(w.camera.minTargetLimit, Math.round(wall * w.camera.targetLimit)),
+    maxPolar: (w.camera.maxPolarDeg * Math.PI) / 180,
+    far: w.far,
+  })
+}
+
 /** Where the sea is, on a coast: the far side of the default view, so you look out to it. */
 const COAST_DIR = { x: -Math.SQRT1_2, z: -Math.SQRT1_2 }
 /** How far out the land ends on a coast. Past the colony, before the far hills. */
@@ -617,9 +678,11 @@ export const SKY_MAX_CELLS = 96
  * displacement map sample, no per-frame work — and vertex colours give the surface its
  * mottling for free rather than costing a texture fetch.
  */
-export function createTerrain(planet, detail, seed = 1337) {
-  const segments = DETAIL_SEGMENTS[detail] || DETAIL_SEGMENTS.medium
-  const geo = new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE, segments, segments)
+export function createTerrain(planet, detail, seed = 1337, world = worldSpec(planet)) {
+  // Segments keep the same metres per quad whatever the ground size, so a compact world is a
+  // smaller mesh and not a coarser one.
+  const segments = Math.max(24, Math.round((DETAIL_SEGMENTS[detail] || DETAIL_SEGMENTS.medium) * (world.groundSize / GROUND_SIZE)))
+  const geo = new THREE.PlaneGeometry(world.groundSize, world.groundSize, segments, segments)
   geo.rotateX(-Math.PI / 2)
 
   const field = fieldFor(planet, seed)
@@ -663,7 +726,7 @@ export function createTerrain(planet, detail, seed = 1337) {
     // Darken the far field so the eye settles on the colony and the hills read as a
     // silhouette rather than as more ground competing with the plots for attention.
     // Gentler than it was: a bright little world should stay bright to its edges.
-    c.multiplyScalar(1 - THREE.MathUtils.smoothstep(dist, COLONY_RADIUS * 0.8, GROUND_SIZE * 0.36) * 0.55)
+    c.multiplyScalar(1 - THREE.MathUtils.smoothstep(dist, COLONY_RADIUS * 0.8, GROUND_SIZE * 0.36) * world.farDarken)
     colors[i * 3] = c.r
     colors[i * 3 + 1] = c.g
     colors[i * 3 + 2] = c.b
@@ -683,6 +746,30 @@ export function createTerrain(planet, detail, seed = 1337) {
   const mesh = new THREE.Mesh(geo, mat)
   mesh.receiveShadow = true
   mesh.name = 'terrain'
+
+  if (world.closed) {
+    // Past the wall the ground dissolves into the haze colour, so the edge of the mesh is
+    // never an edge. Planar fog cannot do this on its own: depth from the camera is the same
+    // for the whole left and right rim of the plane, which is exactly where its edge shows.
+    const fade = { uFadeStart: { value: world.fadeStart }, uFadeEnd: { value: world.fadeEnd } }
+    mat.onBeforeCompile = (shader) => {
+      withCurve(shader)
+      Object.assign(shader.uniforms, fade)
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\n varying vec2 vFadeXZ;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\n vFadeXZ = transformed.xz;')
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\n varying vec2 vFadeXZ;\n uniform float uFadeStart;\n uniform float uFadeEnd;')
+        .replace(
+          '#include <fog_fragment>',
+          `#include <fog_fragment>
+           #ifdef USE_FOG
+             gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, smoothstep( uFadeStart, uFadeEnd, length( vFadeXZ ) ) );
+           #endif`
+        )
+    }
+    mat.customProgramCacheKey = () => 'bc-terrain-fade'
+  }
 
   if (planet.shape === 'sky') {
     // A floating island has ground exactly where the colony's hex cells are, plus a margin
@@ -756,7 +843,9 @@ export function createTerrain(planet, detail, seed = 1337) {
 function sampleHeight(x, z, field, planet) {
   const { noise, craters, islets } = field
   const dist = Math.hypot(x, z)
-  const outside = THREE.MathUtils.smoothstep(dist, COLONY_RADIUS - 6, COLONY_RADIUS + 40)
+  // Where the hills start. A walled world keeps its whole floor flat, so the rampart stands on level ground.
+  const flat = planet.world?.flatRadius ?? COLONY_RADIUS
+  const outside = THREE.MathUtils.smoothstep(dist, flat - 6, flat + 40)
   const gentle = fbm(noise, x * 0.035, z * 0.035, 3) * 0.5
   let broad = fbm(noise, x * 0.012, z * 0.012, 4)
   // On a world whose water is meant to sit in its hollows — lakes, ponds, lava pools —
@@ -907,16 +996,18 @@ const SCATTER = {
     { part: 'Rock_3_L_Color1', weight: 2, size: [0.4, 0.9], sink: 0.12, tint: true },
     { part: 'Rock_3_Q_Color1', weight: 1, size: [0.25, 0.55], sink: 0.1, tint: true },
   ],
+  // Every part here is under about 340 triangles. The Forest pack's cone trees were 1000 to
+  // 2200 each and, instanced a few hundred times, were three quarters of the whole frame's
+  // geometry - drawn again in the shadow pass - for a few green dots at the edge of the view.
   medina: [
-    { part: 'tree_palm', kit: N, weight: 2, size: [1.5, 2.3], sink: 0.03, upright: true },
-    { part: 'tree_palmShort', kit: N, weight: 2, size: [1.3, 2.0], sink: 0.03, upright: true },
+    { part: 'tree_palm', kit: N, weight: 3, size: [1.5, 2.3], sink: 0.03, upright: true },
+    { part: 'tree_palmShort', kit: N, weight: 3, size: [1.3, 2.0], sink: 0.03, upright: true },
     { part: 'tree_palmDetailedTall', kit: N, weight: 1, size: [1.6, 2.4], sink: 0.03, upright: true },
-    { part: 'Tree_4_C_Color1', weight: 2, size: [0.22, 0.38], sink: 0.02, upright: true },
-    { part: 'Tree_3_C_Color1', weight: 2, size: [0.22, 0.38], sink: 0.02, upright: true },
-    { part: 'Bush_3_B_Color1', weight: 2, size: [0.4, 0.8], sink: 0.06, upright: true },
+    { part: 'tree_oak_jungle', kit: N, weight: 2, size: [1.0, 1.5], sink: 0.03, upright: true },
+    { part: 'tree_fat_jungle', kit: N, weight: 2, size: [1.0, 1.5], sink: 0.03, upright: true },
+    { part: 'plant_bushLarge', kit: N, weight: 3, size: [0.9, 1.5], sink: 0.05, upright: true },
     { part: 'rock_smallC', kit: N, weight: 2, size: [1.4, 2.6], sink: 0.2, tint: true },
     { part: 'Rock_1_D_Color1', weight: 2, size: [0.4, 0.9], sink: 0.3, tint: true },
-    { part: 'Rock_3_L_Color1', weight: 1, size: [0.4, 0.8], sink: 0.12, tint: true },
   ],
   desert: [
     { part: 'cactus_tall', kit: N, weight: 4, size: [1.4, 2.4], sink: 0.03, upright: true },
@@ -1045,11 +1136,17 @@ function fallbackShapes(isFlora) {
  * same planet always looks the same, and all kept clear of the plots, the walkways and
  * — where there is any — the water, unless a part is meant to stand in it.
  */
-export function createScatter(planet, density, keepClear = [], seed = 4242, inside = null) {
+export function createScatter(planet, density, keepClear = [], seed = 4242, inside = null, world = worldSpec(planet)) {
   const group = new THREE.Group()
   group.name = 'scatter'
   // Islands have much less usable ground. Concentrate a smaller budget into groves.
-  const count = Math.round(SCATTER_BUDGET * THREE.MathUtils.clamp(density, 0, 1) * (planet.shape === 'island' ? 0.5 : 1))
+  // The budget was sized for the whole 160m disc. A walled world keeps the same planting density
+  // over its own, much smaller, disc - times a share, since the ring inside a wall wants to read
+  // as quiet outskirts and not as a forest.
+  const area = (world.scatterReach / OPEN_WORLD.scatterReach) ** 2
+  const count = Math.round(
+    SCATTER_BUDGET * THREE.MathUtils.clamp(density, 0, 1) * (planet.shape === 'island' ? 0.5 : 1) * Math.min(1, area) * world.scatterShare
+  )
   if (count <= 0) return group
 
   const rand = mulberry(seed)
@@ -1081,7 +1178,11 @@ export function createScatter(planet, density, keepClear = [], seed = 4242, insi
   }
 
   const total = kinds.reduce((sum, k) => sum + k.weight, 0)
-  const meshes = kinds.map((k) => new THREE.InstancedMesh(k.geo, materialFor(k.kit), Math.ceil((count * k.weight) / total) + 8))
+  const meshes = kinds.map((k) => {
+    const mesh = new THREE.InstancedMesh(k.geo, materialFor(k.kit), Math.ceil((count * k.weight) / total) + 8)
+    mesh.name = k.part || 'scatter'
+    return mesh
+  })
 
   const rock = new THREE.Color(planet.rock)
   const dummy = new THREE.Object3D()
@@ -1108,7 +1209,7 @@ export function createScatter(planet, density, keepClear = [], seed = 4242, insi
     // actually look at is the ring just outside the plots, and a strict area-uniform spread
     // leaves it thinner than the far field it is competing with.
     const a = rand() * Math.PI * 2
-    let d = 9 + Math.pow(rand(), 0.58) * 150
+    let d = 9 + Math.pow(rand(), 0.58) * (world.scatterReach - 9)
     let x = Math.cos(a) * d
     let z = Math.sin(a) * d
     // Mixed groups read as vegetation; isolated tiny trees read as scattered props.
@@ -1142,7 +1243,7 @@ export function createScatter(planet, density, keepClear = [], seed = 4242, insi
     }
 
     // Far-field props are allowed to be much bigger, which reads as distance.
-    const far = THREE.MathUtils.smoothstep(d, COLONY_RADIUS, 130)
+    const far = THREE.MathUtils.smoothstep(d, COLONY_RADIUS, Math.min(130, world.scatterReach))
     const [lo, hi] = kind.size
     const s = (lo + rand() * (hi - lo)) * (1 + far * 1.9)
 
@@ -1173,7 +1274,9 @@ export function createScatter(planet, density, keepClear = [], seed = 4242, insi
 
   meshes.forEach((mesh, i) => {
     mesh.count = fill[i]
-    mesh.castShadow = true
+    // Rocks and low bushes throw shadows too short to read at the view's distance; leaving them out
+    // of the shadow pass is free. Anything that stands upright (trees, palms) still casts.
+    mesh.castShadow = !world.closed || (kinds[i].upright === true && kinds[i].size[1] >= 1)
     mesh.receiveShadow = true
     mesh.instanceMatrix.needsUpdate = true
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true

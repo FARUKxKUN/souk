@@ -39,6 +39,8 @@ export const PRESETS = {
       ambientOcclusion: 0,
       clouds: false,
       fauna: 'low',
+      maxPixelRatio: 1,
+      reflections: false,
     },
   },
   low: {
@@ -61,11 +63,13 @@ export const PRESETS = {
       ambientOcclusion: 0,
       clouds: true,
       fauna: 'low',
+      maxPixelRatio: 1,
+      reflections: false,
     },
   },
   balanced: {
     label: 'Balanced',
-    hint: 'the default — looks good, runs cool',
+    hint: 'the default - tuned for a laptop with an entry-level GPU',
     values: {
       renderScale: 1,
       shadows: 'low',
@@ -80,9 +84,11 @@ export const PRESETS = {
       ibl: true,
       tiltShift: true,
       colorGrade: true,
-      ambientOcclusion: 0.25,
+      ambientOcclusion: 0,
       clouds: true,
       fauna: 'full',
+      maxPixelRatio: 1.25,
+      reflections: false,
     },
   },
   high: {
@@ -105,6 +111,8 @@ export const PRESETS = {
       ambientOcclusion: 0.25,
       clouds: true,
       fauna: 'full',
+      maxPixelRatio: 1.5,
+      reflections: true,
     },
   },
   ultra: {
@@ -127,6 +135,8 @@ export const PRESETS = {
       ambientOcclusion: 0.25,
       clouds: true,
       fauna: 'full',
+      maxPixelRatio: 2,
+      reflections: true,
     },
   },
 }
@@ -145,6 +155,8 @@ export const MAX_AGENT_CAP = Math.max(...Object.values(PRESETS).map((p) => p.val
 const DEFAULTS = {
   preset: 'balanced',
   ...PRESETS.balanced.values,
+  /** Bumped when a preset was re-tuned, so installs that never touched a knob pick up the new value. */
+  perfTuned: 1,
 
   // World
   planet: 'medina',
@@ -220,12 +232,14 @@ const RENDER_KEYS = new Set([
   'saturation',
   'vignette',
   'ambientOcclusion',
+  'maxPixelRatio',
 ])
 
 export class Settings {
   constructor() {
     const stored = load()
     this.values = { ...DEFAULTS, ...stored }
+    retune(this.values, stored)
     // An existing Low/Potato install should not inherit Balanced's new effect by accident.
     if (!Object.hasOwn(stored, 'ambientOcclusion')) {
       this.values.ambientOcclusion = PRESETS[this.values.preset]?.values.ambientOcclusion ?? DEFAULTS.ambientOcclusion
@@ -311,6 +325,7 @@ export class Settings {
     if (PRESETS[incoming.preset] && !Object.hasOwn(incoming, 'ambientOcclusion')) {
       incoming.ambientOcclusion = PRESETS[incoming.preset].values.ambientOcclusion
     }
+    retune(incoming, incoming)
     const changed = []
     for (const [key, value] of Object.entries(incoming)) {
       if (!(key in this.values) || this.values[key] === value) continue
@@ -331,6 +346,27 @@ export class Settings {
   get particleBudget() {
     return PARTICLE_BUDGET[this.values.particles] ?? 0
   }
+}
+
+/**
+ * Keys added to the presets after installs already exist. A saved set that predates one takes
+ * the value of the preset it is on, so a Low install does not quietly inherit Balanced's.
+ */
+const PRESET_ADDED_KEYS = ['maxPixelRatio', 'reflections']
+/** What Balanced used to ask for, per key that was re-tuned. Untouched means "never moved by hand". */
+const RETUNED_BALANCED = { ambientOcclusion: 0.25 }
+
+/** Bring a saved settings object up to the current preset tuning. Mutates `values`, which is ours. */
+function retune(values, stored) {
+  const preset = PRESETS[stored.preset]?.values
+  for (const key of PRESET_ADDED_KEYS) {
+    if (!Object.hasOwn(stored, key) && preset) values[key] = preset[key]
+  }
+  if (Object.hasOwn(stored, 'perfTuned') || stored.preset !== 'balanced') return
+  for (const [key, old] of Object.entries(RETUNED_BALANCED)) {
+    if (stored[key] === old) values[key] = PRESETS.balanced.values[key]
+  }
+  values.perfTuned = DEFAULTS.perfTuned
 }
 
 function load() {

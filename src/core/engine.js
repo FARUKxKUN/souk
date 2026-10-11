@@ -1,10 +1,7 @@
 import * as THREE from 'three'
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js'
-import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
 import { Pass } from 'three/addons/postprocessing/Pass.js'
 
 /**
@@ -15,6 +12,8 @@ import { Pass } from 'three/addons/postprocessing/Pass.js'
 export const OVERLAY_LAYER = 1
 import { SHADOW_SIZES } from './settings.js'
 import { createTiltShift } from './tiltshift.js'
+import { LiteBloomPass } from './bloom.js'
+import { GradedOutputPass } from './graded-output.js'
 import { OcclusionPass } from './occlusion.js'
 
 /** Safari and friends — not Chrome, which also says "Safari" in its user agent. */
@@ -91,7 +90,8 @@ export class Engine {
     this.occlusionPass = null
     this.smaaPass = null
     this.tiltShift = null
-    this.gradePass = null
+    /** Tone mapping and the colour grade, in one pass. */
+    this.outputPass = null
     /** The planet's own nudge to the grade, multiplied into the user's sliders. */
     this._planetGrade = { saturation: 1, warmth: 0 }
     /** How far the view is orbiting; the focal plane sits here. Fed by the frame loop. */
@@ -173,10 +173,7 @@ export class Engine {
         this.bloomPass.strength = s.get('bloomStrength')
       }
       if (this.smaaPass) this.smaaPass.enabled = s.get('antialias')
-      if (this.gradePass) {
-        this.gradePass.enabled = s.get('colorGrade')
-        this._syncGrade()
-      }
+      if (this.outputPass) this._syncGrade()
       if (this.tiltShift) {
         this.tiltShift.enabled = s.get('tiltShift')
         this.tiltShift.setStrength(s.get('tiltShiftStrength'))
@@ -213,7 +210,7 @@ export class Engine {
 
     // A high threshold is what keeps this an accent rather than a haze: only the eyes,
     // lamps, sparks and the sun's disc clear it, so lit surfaces stay crisp.
-    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), this.settings.get('bloomStrength'), 0.55, 0.92)
+    this.bloomPass = new LiteBloomPass(new THREE.Vector2(1, 1), this.settings.get('bloomStrength'), 0.55, 0.92)
     composer.addPass(this.bloomPass)
 
     // After bloom, so an out-of-focus lamp keeps its glow and the glow goes soft with it
@@ -237,16 +234,12 @@ export class Engine {
     // Keep them in linear HDR here so OutputPass still applies their existing colour treatment.
     composer.addPass(new OverlayPass(this.scene, this.camera))
 
-    // OutputPass is what applies tone mapping + sRGB once, at the end of the chain.
-    composer.addPass(new OutputPass())
-
-    // The grade sits on the finished, display-referred image: a touch more saturation, a
-    // warm cast, lifted shadows and a soft vignette. Doing it after tone mapping is what
-    // keeps it a *grade* — the same nudge whatever the exposure — rather than a change to
-    // the lighting.
-    this.gradePass = new ShaderPass(GRADE_SHADER)
-    this.gradePass.enabled = this.settings.get('colorGrade')
-    composer.addPass(this.gradePass)
+    // Tone mapping + sRGB once, at the end of the chain, and the grade on the finished,
+    // display-referred image straight after it: a touch more saturation, a warm cast, lifted
+    // shadows and a soft vignette. Doing it after tone mapping is what keeps it a *grade* - the
+    // same nudge whatever the exposure - rather than a change to the lighting. One pass for both.
+    this.outputPass = new GradedOutputPass()
+    composer.addPass(this.outputPass)
     this._syncGrade()
 
     this.smaaPass = new SMAAPass(1, 1)
@@ -264,7 +257,7 @@ export class Engine {
     this.occlusionPass = null
     this.smaaPass = null
     this.tiltShift = null
-    this.gradePass = null
+    this.outputPass = null
   }
 
   _wantsPost() {
@@ -279,8 +272,9 @@ export class Engine {
   }
 
   _syncGrade() {
-    if (!this.gradePass) return
-    const u = this.gradePass.uniforms
+    if (!this.outputPass) return
+    this.outputPass.setGrade(this.settings.get('colorGrade'))
+    const u = this.outputPass.uniforms
     u.uSaturation.value = this.settings.get('saturation') * this._planetGrade.saturation
     u.uWarmth.value = this._planetGrade.warmth
     u.uVignette.value = this.settings.get('vignette')
@@ -353,8 +347,27 @@ export class Engine {
     this.tiltShift?.setFocusDistance(distance)
   }
 
+  /**
+   * Buffer pixels per CSS pixel, after the preset's ceiling. Laptops commonly report 1.5 or 2 for a
+   * 1080p panel, which is 2.25 to 4 times the pixels for a sharpness nobody reads on a small isometric
+   * scene - and fill rate is what a weak GPU runs out of first.
+   */
+  _pixelRatio() {
+    const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1
+    const cap = this.settings.get('maxPixelRatio')
+    return cap > 0 ? Math.min(dpr, cap) : dpr
+  }
+
   _targetScale() {
-    return this.settings.get('renderScale') * (window.devicePixelRatio || 1)
+    return this.settings.get('renderScale') * this._pixelRatio()
+  }
+
+  /** Far plane for the world in view; the depth-of-field pass reads it too. */
+  setFar(far) {
+    if (this.camera.far === far) return
+    this.camera.far = far
+    this.camera.updateProjectionMatrix()
+    this.tiltShift?.setCamera(this.camera)
   }
 
   start() {
@@ -428,16 +441,18 @@ export class Engine {
     const ceiling = this._targetScale()
     const current = this.viewport?.scale ?? ceiling
     // The floor is relative to the display, and never above the user's own ceiling.
-    const floor = Math.min(ceiling, 0.35 * (window.devicePixelRatio || 1))
+    const floor = Math.min(ceiling, 0.35 * this._pixelRatio())
 
     // Sustained evidence, not one sample: 3 slow seconds to drop, 8 fast ones to climb.
-    this._slow = fps < 45 ? (this._slow || 0) + 1 : 0
+    // A machine at half speed does not need ten seconds to prove it: a very slow second counts double.
+    const severe = fps < 30
+    this._slow = fps < 45 ? (this._slow || 0) + (severe ? 2 : 1) : 0
     this._fast = fps > 58 ? (this._fast || 0) + 1 : 0
-    const dpr = window.devicePixelRatio || 1
+    const dpr = this._pixelRatio()
 
     let next = current
     if (this._slow >= 3) {
-      next = Math.max(floor, current - 0.15 * dpr)
+      next = Math.max(floor, current - (severe ? 0.25 : 0.15) * dpr)
       this._slow = 0
       // Having just proved this machine cannot hold the higher scale, do not go back and
       // ask it again ten seconds later — that is the oscillation.
@@ -491,48 +506,6 @@ class OverlayPass extends Pass {
     this.camera.layers.set(0)
     renderer.autoClear = autoClear
   }
-}
-
-/**
- * The grade. Saturation is pulled around luminance; warmth tips red up and blue down; the
- * lift adds a faint cool tint into the blacks so shadows read as shade rather than as holes
- * — the single most Animal Crossing thing in here — and a gentle S-curve gives the mids a
- * little pop. The vignette is wide and soft so it never reads as a border.
- */
-const GRADE_SHADER = {
-  uniforms: {
-    tDiffuse: { value: null },
-    uSaturation: { value: 1 },
-    uWarmth: { value: 0 },
-    uVignette: { value: 0.3 },
-  },
-  vertexShader: /* glsl */ `
-    varying vec2 vUv;
-    void main() {
-      vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
-    }
-  `,
-  fragmentShader: /* glsl */ `
-    uniform sampler2D tDiffuse;
-    uniform float uSaturation;
-    uniform float uWarmth;
-    uniform float uVignette;
-    varying vec2 vUv;
-    void main() {
-      vec4 c = texture2D( tDiffuse, vUv );
-      vec3 col = c.rgb;
-      // Lifted, tinted blacks.
-      col += ( 1.0 - col ) * vec3( 0.035, 0.045, 0.075 ) * ( 1.0 - smoothstep( 0.0, 0.5, dot( col, vec3( 0.333 ) ) ) );
-      float l = dot( col, vec3( 0.2126, 0.7152, 0.0722 ) );
-      col = mix( vec3( l ), col, uSaturation );
-      col *= vec3( 1.0 + uWarmth * 0.9, 1.0 + uWarmth * 0.25, 1.0 - uWarmth * 0.9 );
-      col = mix( col, col * col * ( 3.0 - 2.0 * col ), 0.16 );
-      vec2 d = vUv - 0.5;
-      col *= 1.0 - dot( d, d ) * uVignette * 1.15;
-      gl_FragColor = vec4( clamp( col, 0.0, 1.0 ), c.a );
-    }
-  `,
 }
 
 /** Rolling frame stats — an EMA so the readout does not flicker on a single slow frame. */

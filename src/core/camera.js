@@ -51,6 +51,11 @@ export class CameraRig {
     this.dom = domElement
     this.settings = settings
 
+    /** Ends of the range the view may reach. A walled world narrows them - see setLimits(). */
+    this.maxDist = MAX_DIST
+    this.maxPolar = MAX_POLAR
+    this.worldLimit = WORLD_LIMIT
+
     this.target = new THREE.Vector3(0, 0, 0)
     this.desiredTarget = this.target.clone()
 
@@ -165,7 +170,7 @@ export class CameraRig {
       const d = this._pinchDistance()
       const [cx, cy] = this._pinchCentre()
       if (this._pinch > 0 && d > 0) {
-        this.desiredDistance = THREE.MathUtils.clamp(this.desiredDistance * (this._pinch / d), MIN_DIST, MAX_DIST)
+        this.desiredDistance = THREE.MathUtils.clamp(this.desiredDistance * (this._pinch / d), MIN_DIST, this.maxDist)
         this.distance = this.desiredDistance
         this._sync()
       }
@@ -184,7 +189,7 @@ export class CameraRig {
       e.preventDefault()
       this.desiredAzimuth -= dx * 0.006
       // Mouse up tilts toward the horizon, mouse down returns to overhead — Earth's sense.
-      this.desiredPolar = THREE.MathUtils.clamp(this.desiredPolar - dy * 0.005, MIN_POLAR, MAX_POLAR)
+      this.desiredPolar = THREE.MathUtils.clamp(this.desiredPolar - dy * 0.005, MIN_POLAR, this.maxPolar)
       return
     }
 
@@ -239,7 +244,7 @@ export class CameraRig {
     const raw = (e.deltaY * unit) / 100
     const step = Math.sign(raw) * Math.min(Math.abs(raw), 2.5) * (e.ctrlKey ? 1.6 : 1)
 
-    this.desiredDistance = THREE.MathUtils.clamp(this.desiredDistance * (1 + step * 0.16), MIN_DIST, MAX_DIST)
+    this.desiredDistance = THREE.MathUtils.clamp(this.desiredDistance * (1 + step * 0.16), MIN_DIST, this.maxDist)
     // Hold the point under the pointer still for as long as the dolly takes to settle.
     if (this.groundPoint(e.clientX, e.clientY, this._hit2)) {
       this._zoom = { world: this._hit2.clone(), sx: e.clientX, sy: e.clientY }
@@ -260,10 +265,25 @@ export class CameraRig {
   _clampTarget() {
     const t = this.desiredTarget
     const len = Math.hypot(t.x, t.z)
-    if (len > WORLD_LIMIT) {
-      t.x = (t.x / len) * WORLD_LIMIT
-      t.z = (t.z / len) * WORLD_LIMIT
+    if (len > this.worldLimit) {
+      t.x = (t.x / len) * this.worldLimit
+      t.z = (t.z / len) * this.worldLimit
     }
+  }
+
+  /**
+   * How far out, how flat and how far from the middle the view may go. A world with a wall
+   * keeps all three inside what the wall hides, so the empty ground past it is never framed.
+   * Anything already beyond the new range eases back into it.
+   */
+  setLimits({ maxDist = MAX_DIST, targetLimit = WORLD_LIMIT, maxPolar = MAX_POLAR } = {}) {
+    if (maxDist === this.maxDist && targetLimit === this.worldLimit && maxPolar === this.maxPolar) return
+    this.maxDist = maxDist
+    this.worldLimit = targetLimit
+    this.maxPolar = maxPolar
+    this.desiredDistance = Math.min(this.desiredDistance, maxDist)
+    this.desiredPolar = Math.min(this.desiredPolar, maxPolar)
+    this._clampTarget()
   }
 
   /** True when the pointer went down and up without really moving — a click, not a drag. */
@@ -276,7 +296,7 @@ export class CameraRig {
     this.desiredTarget.copy(point)
     this.desiredTarget.y = 0
     this._clampTarget()
-    if (distance) this.desiredDistance = THREE.MathUtils.clamp(distance, MIN_DIST, MAX_DIST)
+    if (distance) this.desiredDistance = THREE.MathUtils.clamp(distance, MIN_DIST, this.maxDist)
     this._zoom = null
     this.idleFor = 99 // settle to isometric right away rather than after a pause
   }

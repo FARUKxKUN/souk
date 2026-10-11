@@ -1099,6 +1099,9 @@ settings.onChange((changed, scope) => {
 
 engine.add({
   update(dt, elapsed) {
+    // A walled world only lets the camera see what is inside its wall.
+    rig.setLimits(colony.world)
+    engine.setFar(colony.world.far)
     rig.setFollow(settings.get('followSelected') ? colony.agentFor(selectedId) : null)
     rig.update(dt)
     // The world bends away from wherever the camera is looking, every frame, before the
