@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
+import { FullScreenQuad, Pass } from 'three/addons/postprocessing/Pass.js'
 
 /**
  * Tilt-shift as an actual lens rather than as a filter.
@@ -194,6 +195,78 @@ const common = {
 }
 
 /**
+ * The soft blur at half resolution: the disc gather runs into a half-size target (a quarter of the
+ * pixels), then one cheap full-size pass lays it over the sharp frame by how out of focus each
+ * pixel is. The blur radius is a handful of pixels, so a half-size result is as soft as it ought
+ * to be, and the in-focus band comes straight from the full-size frame and stays sharp.
+ */
+const COMPOSITE = {
+  vertexShader: common.vertexShader,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tSharp;
+    uniform sampler2D tBlur;
+    uniform float uMaxRadius;
+    varying vec2 vUv;
+    void main() {
+      vec4 sharp = texture2D( tSharp, vUv );
+      vec4 blur = texture2D( tBlur, vUv );
+      // Alpha is the circle of confusion; a radius under about a pixel is left alone.
+      float t = clamp( blur.a * uMaxRadius / 1.5, 0.0, 1.0 );
+      gl_FragColor = vec4( mix( sharp.rgb, blur.rgb, t ), 1.0 );
+    }
+  `,
+}
+
+class HalfResDiscPass extends Pass {
+  constructor() {
+    super()
+    this.uniforms = THREE.UniformsUtils.clone(common.uniforms)
+    this.blurMaterial = new THREE.ShaderMaterial({
+      defines: { COC_FROM_DEPTH: '', COC_OUT: 'coc', DISC_BLUR: '' },
+      uniforms: this.uniforms,
+      vertexShader: common.vertexShader,
+      fragmentShader: common.fragmentShader,
+    })
+    this.compositeMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        tSharp: { value: null },
+        tBlur: { value: null },
+        // Shared with the blur material, so the controller's one write reaches both.
+        uMaxRadius: this.uniforms.uMaxRadius,
+      },
+      vertexShader: COMPOSITE.vertexShader,
+      fragmentShader: COMPOSITE.fragmentShader,
+    })
+    this.target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false })
+    this.quad = new FullScreenQuad(null)
+  }
+
+  setSize(width, height) {
+    this.target.setSize(Math.max(1, Math.round(width / 2)), Math.max(1, Math.round(height / 2)))
+  }
+
+  render(renderer, writeBuffer, readBuffer) {
+    this.uniforms.tDiffuse.value = readBuffer.texture
+    this.quad.material = this.blurMaterial
+    renderer.setRenderTarget(this.target)
+    this.quad.render(renderer)
+
+    this.compositeMaterial.uniforms.tSharp.value = readBuffer.texture
+    this.compositeMaterial.uniforms.tBlur.value = this.target.texture
+    this.quad.material = this.compositeMaterial
+    renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer)
+    this.quad.render(renderer)
+  }
+
+  dispose() {
+    this.target.dispose()
+    this.blurMaterial.dispose()
+    this.compositeMaterial.dispose()
+    this.quad.dispose()
+  }
+}
+
+/**
  * The passes, already oriented and already told which of them owns the depth read.
  * Kept together so the caller sets a size, a strength or a focus once and every pass agrees —
  * a horizontal pass blurring harder than the vertical one reads as smearing, not as defocus.
@@ -203,7 +276,7 @@ const common = {
  * hands it on in alpha, the second consumes it.
  */
 export function createTiltShift() {
-  const disc = new ShaderPass({ ...common, defines: { COC_FROM_DEPTH: '', COC_OUT: '1.0', DISC_BLUR: '' } })
+  const disc = new HalfResDiscPass()
   const horizontal = new ShaderPass({ ...common, defines: { COC_FROM_DEPTH: '', COC_OUT: 'coc' } })
   const vertical = new ShaderPass({ ...common, defines: { COC_OUT: '1.0' } })
   horizontal.uniforms.uAxis.value.set(1, 0)

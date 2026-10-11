@@ -71,7 +71,7 @@ export const PRESETS = {
     label: 'Balanced',
     hint: 'the default - tuned for a laptop with an entry-level GPU',
     values: {
-      renderScale: 1,
+      renderScale: 0.9,
       shadows: 'low',
       bloom: true,
       antialias: false,
@@ -156,7 +156,7 @@ const DEFAULTS = {
   preset: 'balanced',
   ...PRESETS.balanced.values,
   /** Bumped when a preset was re-tuned, so installs that never touched a knob pick up the new value. */
-  perfTuned: 1,
+  perfTuned: 2,
 
   // World
   planet: 'medina',
@@ -354,7 +354,7 @@ export class Settings {
  */
 const PRESET_ADDED_KEYS = ['maxPixelRatio', 'reflections']
 /** What Balanced used to ask for, per key that was re-tuned. Untouched means "never moved by hand". */
-const RETUNED_BALANCED = { ambientOcclusion: 0.25 }
+const RETUNED_BALANCED = { ambientOcclusion: 0.25, renderScale: 1 }
 
 /** Bring a saved settings object up to the current preset tuning. Mutates `values`, which is ours. */
 function retune(values, stored) {
@@ -362,7 +362,7 @@ function retune(values, stored) {
   for (const key of PRESET_ADDED_KEYS) {
     if (!Object.hasOwn(stored, key) && preset) values[key] = preset[key]
   }
-  if (Object.hasOwn(stored, 'perfTuned') || stored.preset !== 'balanced') return
+  if ((stored.perfTuned ?? 0) >= DEFAULTS.perfTuned || stored.preset !== 'balanced') return
   for (const [key, old] of Object.entries(RETUNED_BALANCED)) {
     if (stored[key] === old) values[key] = PRESETS.balanced.values[key]
   }

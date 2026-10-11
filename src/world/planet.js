@@ -44,17 +44,20 @@ export const PLANETS = {
       night: { top: 0x141a3a, bottom: 0x232d5c },
       dusk: 0xc8703a,
     },
-    // Closer than the open worlds: the rampart ring closes the view, so haze only has to
-    // soften the wall and the fade-out beyond it, and the colony itself stays crisp at any zoom.
-    fog: { color: 0xcfdcea, near: 95, far: 210 },
+    // No haze inside the walls: the wall closes the view, the ground fades out beyond it, and the
+    // whitewash and blue should read clean at every zoom. Fog starts past the far side of the wall.
+    fog: { color: 0xcfdcea, near: 170, far: 330 },
     // A walled quarter, not an open plain: see worldSpec().
     world: {
-      rampart: { radius: 66, margin: 14, apron: 26, step: 6 },
+      // The wall stands one margin (about a plot's width) past the farthest cell, never less than `radius`.
+      rampart: { radius: 36, margin: 9, apron: 14, step: 4 },
       flatRadius: 86,
       scatterInset: 5,
-      scatterShare: 0.6,
-      farDarken: 0.16,
-      camera: { maxDist: 1.6, targetLimit: 0.62, minTargetLimit: 30, maxPolarDeg: 78 },
+      // No open-field scatter: the medina fills the space (medina-fill.js), with palms in courtyards.
+      scatterShare: 0,
+      farDarken: 0,
+      // Camera, as multiples of the wall radius: the farthest it backs off frames the whole walled souk.
+      camera: { maxDist: 2.0, homeDist: 1.0, targetLimit: 0.55, minTargetLimit: 18, maxPolarDeg: 72 },
       far: 460,
     },
     sun: { color: 0xfff1da, intensity: 2.0, night: 0.1 },
@@ -66,6 +69,8 @@ export const PLANETS = {
       night: { sky: 0x9aaedc, ground: 0x4a5080, intensity: 0.95 },
       fillNight: 0.9,
     },
+    // Half the sky-probe light: at full strength it greys the limestone and the sand.
+    iblScale: 0.45,
     atmosphere: 0.5,
     craters: 0,
     roughness: 0.55,
@@ -615,6 +620,7 @@ const OPEN_WORLD = Object.freeze({
   fadeStart: Infinity,
   fadeEnd: Infinity,
   maxDist: 150,
+  homeDist: 62,
   targetLimit: 82,
   maxPolar: (84 * Math.PI) / 180,
   far: 900,
@@ -646,7 +652,8 @@ export function worldSpec(planet, footprint = 0) {
     farDarken: w.farDarken,
     fadeStart: wall + 5,
     fadeEnd: wall + apron - 2,
-    maxDist: Math.max(100, Math.round(wall * w.camera.maxDist)),
+    maxDist: Math.round(wall * w.camera.maxDist),
+    homeDist: Math.round(wall * w.camera.homeDist),
     targetLimit: Math.max(w.camera.minTargetLimit, Math.round(wall * w.camera.targetLimit)),
     maxPolar: (w.camera.maxPolarDeg * Math.PI) / 180,
     far: w.far,

@@ -240,7 +240,7 @@ export class Sky {
     this._envTarget?.dispose()
     this._envTarget = next
     this.scene.environment = next.texture
-    this.scene.environmentIntensity = this.settings.get('iblIntensity')
+    this.scene.environmentIntensity = this.settings.get('iblIntensity') * (this.planet?.iblScale ?? 1)
   }
 
   _buildDome() {
@@ -529,7 +529,9 @@ export class Sky {
     this.hemi.groundColor.set(an ? this._c1.set(an.ground).lerp(this._c2.set(planet.ambient.ground), day) : planet.ambient.ground)
     // The hemisphere light drops right back when IBL is carrying the ambient — running both
     // at full strength double-counts the sky and flattens everything out.
-    const hemiScale = this.settings.get('ibl') ? 0.55 : 1
+    // A planet that asks for less image-based light (the medina's blue sky otherwise washes the sand
+    // to grey) gets the direct fill back in proportion.
+    const hemiScale = this.settings.get('ibl') ? 1 - 0.45 * (planet.iblScale ?? 1) : 1
     this.hemi.intensity = THREE.MathUtils.lerp(an ? an.intensity : planet.ambient.intensity * 0.22, planet.ambient.intensity, day) * hemiScale
     // Enough of a bounce that surfaces turned away from the sun read as dark rather than as
     // holes in the image. On an airless world this stands in for regolith bounce.
@@ -573,7 +575,7 @@ export class Sky {
     }
     if (changed.has('stars')) this.setTime(this.time)
     if (changed.has('ibl') || changed.has('iblIntensity')) {
-      this.scene.environmentIntensity = this.settings.get('iblIntensity')
+      this.scene.environmentIntensity = this.settings.get('iblIntensity') * (this.planet?.iblScale ?? 1)
       this._refreshEnvironment(true)
     }
   }

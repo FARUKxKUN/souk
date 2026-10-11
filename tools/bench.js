@@ -66,6 +66,7 @@ function step(dt = 1 / 60) {
 const ISO = THREE.MathUtils.degToRad(56)
 const VIEWS = {
   mid: { distance: 62, polar: ISO },
+  default: { distance: 62, polar: ISO },
   // Farthest the camera is allowed out, at the resting angle, and at the flattest tilt.
   wide: { distance: 150, polar: ISO },
   low: { distance: 150, polar: THREE.MathUtils.degToRad(84) },
@@ -77,7 +78,9 @@ function setView(name, azimuth = Math.PI / 4) {
   rig.desiredTarget.copy(rig.target)
   rig.setLimits?.(colony.world)
   // The same clamps the user's wheel and drag are held to.
-  rig.distance = rig.desiredDistance = Math.min(v.distance, rig.maxDist ?? 150)
+  // 'wide' is the farthest the camera may go; 'default' is where the app opens.
+  const dist = name === 'wide' ? (rig.maxDist ?? 150) : name === 'default' ? (rig.homeDist ?? 62) : v.distance
+  rig.distance = rig.desiredDistance = Math.min(dist, rig.maxDist ?? 150)
   rig.polar = rig.desiredPolar = Math.min(v.polar, rig.maxPolar ?? 1.46)
   rig.azimuth = rig.desiredAzimuth = azimuth
   rig._sync()

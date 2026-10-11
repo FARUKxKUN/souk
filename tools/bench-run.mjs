@@ -25,7 +25,7 @@ const ablate = arg('ablate', false)
 const times = String(arg('times', '0.34')).split(',')
 const quick = arg('quick', false)
 const set = arg('set', '')
-const views = quick ? ['mid', 'wide'] : ['mid', 'wide', 'low']
+const views = quick ? ['default', 'wide'] : ['default', 'mid', 'wide', 'low']
 
 const browser = await chromium.launch({
   headless: true,
@@ -50,7 +50,7 @@ for (const t of times) {
     entry.info = await page.evaluate(() => window.__bench.info())
     entry.cpu = await page.evaluate(() => window.__bench.cpuMs(120))
     if (view !== 'low' && !quick) entry.passes = await page.evaluate(() => window.__bench.passMs(60))
-    if (view === 'mid' && t === times[0]) entry.census = await page.evaluate(() => window.__bench.census())
+    if (view === 'default' && t === times[0]) entry.census = await page.evaluate(() => window.__bench.census())
     if (ablate && view === 'wide' && t === times[0]) {
       entry.ablate = {}
       for (const name of await page.evaluate(() => window.__bench.names())) {
@@ -60,7 +60,7 @@ for (const t of times) {
     r[view] = entry
   }
   if (shots) {
-    for (const view of ['wide', 'mid', 'low']) {
+    for (const view of ['wide', 'default', 'low']) {
       await page.evaluate((v) => window.__bench.view(v), view)
       await page.evaluate(() => { for (let i = 0; i < 20; i++) window.__bench.step() })
       const data = await page.evaluate(() => window.__bench.shot())

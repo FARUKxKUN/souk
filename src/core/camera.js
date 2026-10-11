@@ -55,6 +55,9 @@ export class CameraRig {
     this.maxDist = MAX_DIST
     this.maxPolar = MAX_POLAR
     this.worldLimit = WORLD_LIMIT
+    /** Where the view opens and where 'reset view' returns to. */
+    this.homeDist = 62
+    this._homed = false
 
     this.target = new THREE.Vector3(0, 0, 0)
     this.desiredTarget = this.target.clone()
@@ -276,7 +279,13 @@ export class CameraRig {
    * keeps all three inside what the wall hides, so the empty ground past it is never framed.
    * Anything already beyond the new range eases back into it.
    */
-  setLimits({ maxDist = MAX_DIST, targetLimit = WORLD_LIMIT, maxPolar = MAX_POLAR } = {}) {
+  setLimits({ maxDist = MAX_DIST, targetLimit = WORLD_LIMIT, maxPolar = MAX_POLAR, homeDist = 62 } = {}) {
+    this.homeDist = homeDist
+    // The very first call opens the view at home: close, and the workshops readable.
+    if (!this._homed) {
+      this._homed = true
+      this.distance = this.desiredDistance = Math.min(homeDist, maxDist)
+    }
     if (maxDist === this.maxDist && targetLimit === this.worldLimit && maxPolar === this.maxPolar) return
     this.maxDist = maxDist
     this.worldLimit = targetLimit
@@ -365,7 +374,7 @@ export class CameraRig {
   resetView() {
     this.orbiting = false
     this.desiredTarget.set(0, 0, 0)
-    this.desiredDistance = 62
+    this.desiredDistance = Math.min(this.homeDist, this.maxDist)
     this.desiredPolar = ISO_POLAR
     this.desiredAzimuth = this._nearestIso()
     this._zoom = null

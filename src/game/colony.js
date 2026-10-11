@@ -2,6 +2,7 @@ import { SceneryReflections } from '../world/reflections.js'
 import * as THREE from 'three'
 import { PLANETS, createTerrain, createScatter, terrainHeight, worldSpec } from '../world/planet.js'
 import { createRampart } from '../world/rampart.js'
+import { createMedinaFill } from '../world/medina-fill.js'
 import { createWater } from '../world/water.js'
 import { Fauna } from '../world/fauna.js'
 import { BuildingSurfaces } from '../world/building-surfaces.js'
@@ -239,7 +240,7 @@ export class Colony {
         // Street life keeps to the alleys and open ground, never inside a workshop's plot.
         blockedAt: (x, z) => {
           for (const plot of this.plots.values()) if (plot.containsWorld(x, z, 0.4)) return true
-          return false
+          return this.fill?.blocked(x, z, 0.4) ?? false
         },
         parcelSurfaceAt: (x, z) => this.buildingSurfaces.at(x, z),
         waterLevel: this.planet.water?.level ?? null,
@@ -419,9 +420,29 @@ export class Colony {
     this.scatterGroup = createScatter(this.planet, this.settings.get('scatterDensity'), clear, 4242, (x, z) => this.onIsland(x, z), this.world)
     this.worldGroup.add(this.scatterGroup)
     this._scatterFootprint = this._plotFootprint()
+    this._buildFill()
     this._buildGrass(clear)
     // The crew routes around scatter, so a new scatter is a new navigation grid.
     if (this.nav) this._rebuildNavigation()
+  }
+
+  /**
+   * The dense medina between the workshops and the wall, on a walled world. Rebuilt with the
+   * scatter, because it has to keep clear of exactly the same cells.
+   */
+  _buildFill() {
+    if (this.fill) {
+      this.worldGroup.remove(this.fill.group)
+      this.fill.dispose()
+      this.fill = null
+    }
+    if (!this.world.closed) return
+    this.fill = createMedinaFill({
+      cells: this._footprintCells(),
+      radius: this.world.rampart,
+      heightAt: (x, z) => terrainHeight(x, z, this.planet),
+    })
+    if (this.fill) this.worldGroup.add(this.fill.group)
   }
 
   /**
