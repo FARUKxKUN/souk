@@ -95,7 +95,7 @@ const actions = {
     const url = engine.canvas.toDataURL('image/png')
     const a = document.createElement('a')
     a.href = url
-    a.download = `bot-crossing-${colony.planet.id}-${stamp()}.png`
+    a.download = `souk-${colony.planet.id}-${stamp()}.png`
     a.click()
     hud.toast('Screenshot saved')
   },
@@ -1115,7 +1115,7 @@ engine.add({
       if (!agent) select(null, {})
       else hud.placeCard(screenOf(agent))
     }
-    hud.setFps(engine.perf, engine.viewport, `${colony.astronauts.visibleCount} bots · ${colony.particles.liveCount} bits`)
+    hud.setFps(engine.perf, engine.viewport, `${colony.astronauts.visibleCount} artisans · ${colony.particles.liveCount} bits`)
     ambience.update(dt, engine.camera, soundWorld())
   },
 })

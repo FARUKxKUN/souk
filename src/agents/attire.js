@@ -45,8 +45,32 @@ export function paintBodyVertex(meshName, x, y) {
   return { hex: 0xffffff, tint: 2 }
 }
 
+/**
+ * The mannequin's head carries sci-fi ear discs on both sides. An artisan has a plain round
+ * head, so pull the discs flush with the cheek wall and point their normals straight out:
+ * the grooves stop catching light.
+ */
+const EAR_BOX = { minX: 0.395, minY: 1.38, maxY: 1.95, maxAbsZ: 0.4 }
+const EAR_WALL_X = 0.418
+
+function flattenEars(meshName, geo) {
+  if (!meshName.endsWith('Head')) return
+  const pos = geo.attributes.position
+  const nor = geo.attributes.normal
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i)
+    const y = pos.getY(i)
+    if (Math.abs(x) < EAR_BOX.minX || y < EAR_BOX.minY || y > EAR_BOX.maxY) continue
+    if (Math.abs(pos.getZ(i)) > EAR_BOX.maxAbsZ) continue
+    const side = Math.sign(x)
+    pos.setX(i, side * Math.min(Math.abs(x), EAR_WALL_X))
+    if (nor) nor.setXYZ(i, side, 0, 0)
+  }
+}
+
 /** Add `color` (vec3) and `aTint` (float) attributes to a merged-body source geometry. */
 export function paintBodyGeometry(meshName, geo) {
+  flattenEars(meshName, geo)
   const pos = geo.attributes.position
   const colors = new Float32Array(pos.count * 3)
   const tints = new Float32Array(pos.count)

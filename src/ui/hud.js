@@ -318,7 +318,7 @@ export class Hud {
       ),
       this._slider('Master', 'masterVolume', 0, 1, 0.05, (v) => `${Math.round(v * 100)}%`),
       this._slider('Ambience', 'ambienceVolume', 0, 1, 0.05, (v) => `${Math.round(v * 100)}%`, 'Beds and the sounds of the world.'),
-      this._slider('Effects', 'effectsVolume', 0, 1, 0.05, (v) => `${Math.round(v * 100)}%`, 'Hammering, drones, splashes, the chime when somebody needs you.')
+      this._slider('Effects', 'effectsVolume', 0, 1, 0.05, (v) => `${Math.round(v * 100)}%`, 'Hammering, copper tinks, cart wheels, the chime when somebody needs you.')
     )
     body.appendChild(sound)
   }

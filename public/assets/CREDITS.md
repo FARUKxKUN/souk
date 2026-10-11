@@ -17,3 +17,7 @@ CC0 requires nothing of you. Crediting Kay and Kenney costs nothing either.
 
 See the repository README under "Where the art comes from" for how these are packed, and
 "Rebuilding them" if you want to regenerate them from the original packs.
+
+## Fonts
+
+`public/fonts/fraunces.woff2` (Fraunces, Undercase Type) and `public/fonts/ibm-plex-sans.woff2` (IBM Plex Sans, IBM) are self-hosted under the [SIL Open Font License 1.1](https://openfontlicense.org).

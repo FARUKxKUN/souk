@@ -23,6 +23,7 @@ import {
 } from '../world/plots.js'
 import { translateCells } from '../world/plot-move.js'
 import { createBuilding, buildingUniforms, Scaffolds } from '../world/buildings.js'
+import { WaitingBeams } from '../world/beacons.js'
 import { Ship } from '../world/ship.js'
 import { Astronauts } from '../agents/astronauts.js'
 import { Indicators, BADGE } from '../agents/indicators.js'
@@ -128,7 +129,7 @@ export class Colony {
     this.camera = camera
     this.renderer = renderer
 
-    this.planet = PLANETS[settings.get('planet')] || PLANETS.moon
+    this.planet = PLANETS[settings.get('planet')] || PLANETS.medina
     this._applyPlanetTint()
     this.sky = new Sky(scene, settings, renderer)
     this.sky.setPlanet(this.planet)
@@ -164,6 +165,7 @@ export class Colony {
     this.indicators = new Indicators(scene, settings, MAX_AGENT_CAP)
     this.particles = new Particles(scene, settings)
     this.scaffolds = new Scaffolds(scene, 320)
+    this.beams = new WaitingBeams(scene)
     // Birds, butterflies, fish and the cargo drones: the life that carries no information.
     this.fauna = new Fauna(scene, settings)
     this.reflections = new SceneryReflections({
@@ -229,6 +231,11 @@ export class Colony {
       this._faunaPlanet = this.planet.id
       this.fauna.setPlanet(this.planet, {
         heightAt: (x, z) => this.groundAt(x, z),
+        // Street life keeps to the alleys and open ground, never inside a workshop's plot.
+        blockedAt: (x, z) => {
+          for (const plot of this.plots.values()) if (plot.containsWorld(x, z, 0.4)) return true
+          return false
+        },
         parcelSurfaceAt: (x, z) => this.buildingSurfaces.at(x, z),
         waterLevel: this.planet.water?.level ?? null,
         waterHeightAt: this.water ? (x, z, t) => this.water.heightAt(x, z, t) : undefined,
@@ -1064,6 +1071,8 @@ export class Colony {
     }))
     this._updatePlots(night, elapsed)
     this._updateScaffolds()
+    this.scaffolds.setNight(night)
+    this.beams.update(this.astronauts.agents, elapsed)
     this._updateLabels(dt)
     this.reflections.update(dt, focus || this.sky.focus, this.camera)
   }
@@ -1285,6 +1294,7 @@ export class Colony {
     this.indicators.dispose()
     this.particles.dispose()
     this.scaffolds.dispose()
+    this.beams.dispose()
     disposeTree(this.worldGroup)
     disposeTree(this.plotGroup)
     disposeTree(this.labelGroup)

@@ -1,14 +1,14 @@
 import * as THREE from 'three'
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 import { mulberry } from './planet.js'
-import { ATLAS, CELL, atlasTexture, cellMask, part } from './kit.js'
+import { ATLAS, CELL, atlasTexture, cellMask, hasPart, part } from './kit.js'
 
 /** Which kit the colony's buildings are assembled from. */
 const KIT = 'medina'
 import { withCurve } from '../core/curve.js'
 
 /**
- * Colony buildings � one per thread, assembled out of the procedural medina kit
+ * Workshop buildings - one per thread, assembled out of the procedural medina kit
  * (`tools/build-medina.mjs`: whitewashed blocks, arches, blue doors, awnings, domes) and
  * seeded from the thread's own id, so a given session always builds the same structure on
  * every reload and on every planet.
@@ -256,6 +256,19 @@ const KINDS = {
 }
 
 const KIND_IDS = Object.keys(KINDS)
+/** Pick odds: stalls and workshops make up the street, towers are the rare landmark. */
+const KIND_WEIGHT = { stall: 5, workshop: 5, tower: 0.5 }
+const KIND_DEFAULT_WEIGHT = 2
+const KIND_WEIGHT_TOTAL = KIND_IDS.reduce((sum, id) => sum + (KIND_WEIGHT[id] ?? KIND_DEFAULT_WEIGHT), 0)
+
+function pickKind(r) {
+  let t = r * KIND_WEIGHT_TOTAL
+  for (const id of KIND_IDS) {
+    t -= KIND_WEIGHT[id] ?? KIND_DEFAULT_WEIGHT
+    if (t < 0) return id
+  }
+  return KIND_IDS[KIND_IDS.length - 1]
+}
 
 // ── the reveal shader ─────────────────────────────────────────────────────────────────
 
@@ -456,7 +469,7 @@ function depthMaterial(uniforms) {
  */
 export function createBuilding({ seed = 1, accent = 0xc96442, kind = null } = {}) {
   const rand = mulberry(seed)
-  const chosen = kind && KINDS[kind] ? kind : KIND_IDS[Math.floor(rand() * KIND_IDS.length)]
+  const chosen = kind && KINDS[kind] ? kind : pickKind(rand())
 
   const c = new Composer()
   const label = KINDS[chosen](c, rand, accent)
@@ -548,24 +561,42 @@ export function createBuilding({ seed = 1, accent = 0xc96442, kind = null } = {}
   return mesh
 }
 
-/** Scaffolding around anything still going up. One instanced mesh for the whole colony. */
+/**
+ * Lantern posts beside every workshop with a live thread: in the souk, a lit lantern is how a
+ * stall says "someone is working here". Two short copper posts per site (it used to be four
+ * tall bare scaffold poles, which read as fence stakes), one instanced pair for the colony.
+ */
+export const SCAFFOLD_POSTS = [0, 2]
+const POST_SCALE = 0.85
+const LANTERN_GLOW = 0xffa050
+
 export class Scaffolds {
   constructor(scene, capacity = 256) {
-    const geo = new THREE.CylinderGeometry(0.045, 0.045, 1, 5)
-    geo.translate(0, 0.5, 0) // pivot at the foot, so scaling grows it upward
+    const poleGeo = hasPart('lantern_pole', 'medina') ? part('lantern_pole', 'medina') : new THREE.CylinderGeometry(0.045, 0.045, 1.4, 5).translate(0, 0.7, 0)
+    const lampGeo = hasPart('lantern_lamp', 'medina') ? part('lantern_lamp', 'medina') : new THREE.SphereGeometry(0.1, 6, 5).translate(0.24, 1.3, 0)
+    const atlas = atlasTexture('medina')
     this.mesh = new THREE.InstancedMesh(
-      geo,
-      new THREE.MeshStandardMaterial({ color: 0xb08d52, roughness: 0.85, flatShading: true }),
+      poleGeo,
+      new THREE.MeshStandardMaterial(atlas ? { map: atlas, roughness: 0.6, metalness: 0.1 } : { color: 0xb87333, roughness: 0.6 }),
       capacity
     )
+    this.lamps = new THREE.InstancedMesh(lampGeo, new THREE.MeshBasicMaterial({ color: LANTERN_GLOW }), capacity)
+    this._lampBase = new THREE.Color(LANTERN_GLOW)
+    for (const m of [this.mesh, this.lamps]) {
+      m.count = 0
+      m.frustumCulled = false
+      m.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+      scene.add(m)
+    }
     this.mesh.castShadow = true
-    this.mesh.count = 0
-    this.mesh.frustumCulled = false
-    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
-    scene.add(this.mesh)
     this.scene = scene
     this.capacity = capacity
     this._dummy = new THREE.Object3D()
+  }
+
+  /** Lamp glass burns brighter after dark. */
+  setNight(night) {
+    this.lamps.material.color.copy(this._lampBase).multiplyScalar(0.5 + night * 2.4)
   }
 
   /** `sites` are `{ x, y, z, radius, height }` for every building not yet finished. */
@@ -573,25 +604,33 @@ export class Scaffolds {
     const d = this._dummy
     let n = 0
     for (const site of sites) {
-      for (let i = 0; i < 4 && n < this.capacity; i++) {
+      for (const i of SCAFFOLD_POSTS) {
+        if (n >= this.capacity) break
         const a = (i / 4) * Math.PI * 2 + 0.78
         const x = site.x + Math.cos(a) * site.radius
         const z = site.z + Math.sin(a) * site.radius
         if (site.contains && !site.contains(x, z)) continue
         d.position.set(x, site.y, z)
-        d.rotation.set(0, a, 0)
-        d.scale.set(1, Math.max(0.4, site.height), 1)
+        // The lantern arm points in toward the workshop.
+        d.rotation.set(0, -a - Math.PI, 0)
+        d.scale.setScalar(POST_SCALE)
         d.updateMatrix()
-        this.mesh.setMatrixAt(n++, d.matrix)
+        this.mesh.setMatrixAt(n, d.matrix)
+        this.lamps.setMatrixAt(n, d.matrix)
+        n++
       }
     }
-    this.mesh.count = n
-    this.mesh.instanceMatrix.needsUpdate = true
+    for (const m of [this.mesh, this.lamps]) {
+      m.count = n
+      m.instanceMatrix.needsUpdate = true
+    }
   }
 
   dispose() {
-    this.mesh.geometry.dispose()
-    this.mesh.material.dispose()
-    this.scene.remove(this.mesh)
+    for (const m of [this.mesh, this.lamps]) {
+      m.geometry.dispose()
+      m.material.dispose()
+      this.scene.remove(m)
+    }
   }
 }

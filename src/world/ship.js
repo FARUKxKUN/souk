@@ -320,10 +320,35 @@ function leafGeometry(side) {
   // Built for the left hinge (leaf extends +x); mirror for the right one.
   if (side > 0) {
     merged.scale(-1, 1, 1)
-    const index = merged.index
-    if (index) merged.setIndex(Array.from(index.array).reverse())
+    flipWinding(merged)
   }
   return merged
+}
+
+/** Mirroring reverses every triangle's winding: swap the last two vertices of each to restore it. */
+function flipWinding(geo) {
+  const index = geo.index
+  if (index) {
+    const arr = index.array
+    for (let i = 0; i + 2 < arr.length; i += 3) {
+      const t = arr[i + 1]
+      arr[i + 1] = arr[i + 2]
+      arr[i + 2] = t
+    }
+    index.needsUpdate = true
+    return
+  }
+  for (const attr of Object.values(geo.attributes)) {
+    const n = attr.itemSize
+    for (let v = 0; v + 2 < attr.count; v += 3) {
+      for (let k = 0; k < n; k++) {
+        const x = attr.getComponent(v + 1, k)
+        attr.setComponent(v + 1, k, attr.getComponent(v + 2, k))
+        attr.setComponent(v + 2, k, x)
+      }
+    }
+    attr.needsUpdate = true
+  }
 }
 
 /**

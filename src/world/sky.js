@@ -376,9 +376,15 @@ export class Sky {
   /** The big body hanging in the sky — Earth from the Moon, a moon from Terra, and so on. */
   _buildCompanion() {
     this.companion = new THREE.Group()
+    // The default: a lit sphere (Earth from the Moon). Presets can ask for a crescent instead.
+    this.companionSphere = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 24, 18),
+      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0 })
+    )
+    this.companionSphere.renderOrder = -997
     // A plain crescent moon: a camera-facing quad with a drawn crescent.
     const geo = new THREE.PlaneGeometry(2, 2)
-    this.companionBody = new THREE.Mesh(
+    this.companionCrescent = new THREE.Mesh(
       geo,
       new THREE.MeshBasicMaterial({
         map: crescentTexture(),
@@ -410,8 +416,9 @@ export class Sky {
       })
     )
     this.companionHalo.renderOrder = -998
-    this.companionBody.renderOrder = -997
-    this.companion.add(this.companionHalo, this.companionBody)
+    this.companionCrescent.renderOrder = -997
+    this.companionBody = this.companionSphere
+    this.companion.add(this.companionHalo, this.companionSphere, this.companionCrescent)
     this.companion.frustumCulled = false
     this.group.add(this.companion)
   }
@@ -424,13 +431,23 @@ export class Sky {
     this.dayBottom = new THREE.Color(planet.sky.bottom)
     // Night is the day palette crushed toward the planet's own horizon colour, so each
     // world keeps its identity after dark instead of all three going the same black.
-    this.nightTop = new THREE.Color(0x141a3a)
-    // Warm copper lantern glow at the horizon, deep indigo overhead.
-    this.nightBottom = new THREE.Color(0x3a2a3c)
-    this.duskColor = new THREE.Color(0xc8703a)
+    // A preset can name its own night and dusk (`sky.night`, `sky.dusk`), as the medina does.
+    const night = planet.sky.night
+    this.nightTop = night
+      ? new THREE.Color(night.top)
+      : new THREE.Color(planet.sky.top).multiplyScalar(0.16).lerp(new THREE.Color(0x03040c), 0.7)
+    this.nightBottom = night ? new THREE.Color(night.bottom) : new THREE.Color(planet.horizon).multiplyScalar(0.5)
+    this.duskColor = new THREE.Color(planet.sky.dusk ?? (planet.atmosphere > 0.4 ? 0xd4692f : 0x4a3550))
 
     const comp = planet.companion
+    this.companionCrescent.visible = comp.crescent === true
+    this.companionSphere.visible = !this.companionCrescent.visible
+    this.companionBody = comp.crescent ? this.companionCrescent : this.companionSphere
     this.companionBody.material.color.set(comp.color)
+    if (!comp.crescent) {
+      this.companionBody.material.emissive.set(comp.color)
+      this.companionBody.material.emissiveIntensity = 0.35
+    }
     this.companionHalo.material.uniforms.uColor.value.set(comp.glow)
     this.companion.scale.setScalar(comp.size)
     // Parked high and off to one side, well away from where the sun tracks.
@@ -498,15 +515,17 @@ export class Sky {
     this.sun.intensity = THREE.MathUtils.lerp(planet.sun.night, planet.sun.intensity, day)
     this._placeSun()
 
-    this.hemi.color.set(planet.ambient.sky)
-    this.hemi.groundColor.set(planet.ambient.ground)
+    // A preset may name a moonlit night ambient (`ambient.night`); otherwise it just dims.
+    const an = planet.ambient.night
+    this.hemi.color.set(an ? this._c1.set(an.sky).lerp(this._c2.set(planet.ambient.sky), day) : planet.ambient.sky)
+    this.hemi.groundColor.set(an ? this._c1.set(an.ground).lerp(this._c2.set(planet.ambient.ground), day) : planet.ambient.ground)
     // The hemisphere light drops right back when IBL is carrying the ambient — running both
     // at full strength double-counts the sky and flattens everything out.
     const hemiScale = this.settings.get('ibl') ? 0.55 : 1
-    this.hemi.intensity = THREE.MathUtils.lerp(planet.ambient.intensity * 0.22, planet.ambient.intensity, day) * hemiScale
+    this.hemi.intensity = THREE.MathUtils.lerp(an ? an.intensity : planet.ambient.intensity * 0.22, planet.ambient.intensity, day) * hemiScale
     // Enough of a bounce that surfaces turned away from the sun read as dark rather than as
     // holes in the image. On an airless world this stands in for regolith bounce.
-    this.fill.intensity = THREE.MathUtils.lerp(0.34, 0.26, day)
+    this.fill.intensity = THREE.MathUtils.lerp(planet.ambient.fillNight ?? 0.34, 0.26, day)
 
     // Sky gradient.
     const top = this._c1.copy(this.nightTop).lerp(this.dayTop, day)
@@ -526,7 +545,8 @@ export class Sky {
     this.stars.visible = this.settings.get('stars') && this.stars.material.uniforms.uOpacity.value > 0.01
 
     this.companionHalo.material.uniforms.uStrength.value = 0.35 + (1 - day) * 0.65
-    this.companionBody.material.opacity = 0.35 + (1 - day) * 0.65
+    if (this.planet.companion.crescent) this.companionBody.material.opacity = 0.35 + (1 - day) * 0.65
+    else this.companionBody.material.emissiveIntensity = 0.25 + (1 - day) * 0.55
 
     // Fog follows the horizon, or the whole world looks like it is behind glass at night.
     this.scene.fog.color.copy(bottom).lerp(this._c1.set(planet.fog.color), 0.55)
@@ -600,9 +620,11 @@ export class Sky {
     this.dome.material.dispose()
     this.stars.geometry.dispose()
     this.stars.material.dispose()
-    this.companionBody.geometry.dispose()
-    this.companionBody.material.map?.dispose()
-    this.companionBody.material.dispose()
+    for (const m of [this.companionSphere, this.companionCrescent]) {
+      m.geometry.dispose()
+      m.material.map?.dispose()
+      m.material.dispose()
+    }
     this.companionHalo.geometry.dispose()
     this.companionHalo.material.dispose()
     this.scene.remove(this.group)

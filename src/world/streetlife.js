@@ -172,23 +172,43 @@ function pickSpot(env, rand, from, maxDist, radius) {
     const z = from.z + Math.sin(a) * d
     const r = Math.hypot(x, z)
     if (r < radius[0] || r > radius[1]) continue
+    if (env.blockedAt?.(x, z)) continue
     const y = env.heightAt(x, z)
     if (Math.abs(y - from.y) <= MAX_STEP) return { x, y, z }
   }
   return null
 }
 
+const SPAWN_TRIES = 24
+
+/** A ground point in the ring, off any plot (`env.blockedAt`) so nothing spawns inside a workshop. */
 function spawnOnRing(env, rand, radius) {
-  const a = rand() * Math.PI * 2
-  const r = radius[0] + Math.sqrt(rand()) * (radius[1] - radius[0])
-  const x = Math.cos(a) * r
-  const z = Math.sin(a) * r
+  let x = 0
+  let z = 0
+  for (let i = 0; i < SPAWN_TRIES; i++) {
+    const a = rand() * Math.PI * 2
+    const r = radius[0] + Math.sqrt(rand()) * (radius[1] - radius[0])
+    x = Math.cos(a) * r
+    z = Math.sin(a) * r
+    if (!env.blockedAt?.(x, z)) break
+  }
   return { x, y: env.heightAt(x, z), z }
+}
+
+/** Plots arrive after the animals do: anything standing inside one is moved back out. */
+function evict(env, rand, radius, c) {
+  if (!env.blockedAt?.(c.x, c.z)) return false
+  const p = spawnOnRing(env, rand, radius)
+  c.x = c.tx = c.fx = p.x
+  c.z = c.tz = c.fz = p.z
+  c.y = c.ty = c.fy = p.y
+  return true
 }
 
 function disposeMeshes(meshes) {
   for (const m of meshes) {
     m.removeFromParent()
+    m.dispose()
     m.geometry.dispose()
     m.material.dispose()
   }
@@ -257,6 +277,7 @@ export class Cats {
       const c = this.cats[i]
       c.clock += dt * motion
       c.timer -= dt
+      if (evict(this.env, this.rand, this.radius, c)) c.state = 'sit'
       if (c.state === 'walk') this._walk(c, dt)
       else if (c.timer <= 0) this._next(c)
       c.sit = smooth(c.sit, c.state === 'walk' ? 0 : 1, 5, dt)
@@ -399,6 +420,7 @@ export class Pigeons {
     for (let i = 0; i < n; i++) {
       const b = this.birds[i]
       b.clock += dt * motion
+      if (evict(this.env, this.rand, this.radius, b)) b.state = 'peck'
       this._step(b, dt)
       b.air = smooth(b.air, b.state === 'fly' ? 1 : 0, 14, dt)
       this._write(i, b)
@@ -447,10 +469,9 @@ export class Pigeons {
     this.head.setMatrixAt(i, pose(_base, 0, 0.17 - peck * 0.09, 0.1 + strut * 0.02 + peck * 0.05 + flying * 0.02, peck * 0.7, 0, 0))
     const flap = Math.sin(b.clock * 26 + b.phase) * 0.9 * flying
     const open = 0.3 + flying * 0.7
-    for (const side of [-1, 1]) {
-      const slot = i * 2 + (side > 0 ? 1 : 0)
-      this.wings.setMatrixAt(slot, pose(_base, side * 0.055, 0.12, 0, 0, 0, side * (flap + 0.1 * (1 - flying)), side * open, 1, 1))
-    }
+    const rest = 0.1 * (1 - flying)
+    this.wings.setMatrixAt(i * 2, pose(_base, -0.055, 0.12, 0, 0, 0, -(flap + rest), -open, 1, 1))
+    this.wings.setMatrixAt(i * 2 + 1, pose(_base, 0.055, 0.12, 0, 0, 0, flap + rest, open, 1, 1))
   }
 
   dispose() {

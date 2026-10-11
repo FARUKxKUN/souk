@@ -32,26 +32,41 @@ export const PLANETS = {
     id: 'medina',
     name: 'Medina',
     blurb: 'Sun-bleached limestone, blue doors, a warm lantern night.',
-    ground: { low: 0xd9c7a3, high: 0xeee4d0, tint: 0xf4ead4 },
+    ground: { low: 0xc9b088, high: 0xdcc9a0, tint: 0xe6d6b2 },
     // Limestone on the walls' neutral swatches: the kit leans warm-white here.
-    buildingTint: 0xf4f1ea,
+    buildingTint: 0xe9e4da,
     rock: 0xc9b48c,
     horizon: 0xf2dcb8,
-    sky: { top: 0x3f7fc9, bottom: 0xf2dcb8 },
-    fog: { color: 0xf0dfc2, near: 95, far: 240 },
-    sun: { color: 0xfff0d6, intensity: 2.6, night: 0.1 },
-    ambient: { sky: 0xb4d0ee, ground: 0xb89870, intensity: 0.95 },
-    atmosphere: 0.8,
+    sky: {
+      top: 0x2a68c8,
+      bottom: 0xb9d3e8,
+      // Deep indigo overhead, a cooler indigo at the horizon, copper-orange dusk.
+      night: { top: 0x141a3a, bottom: 0x232d5c },
+      dusk: 0xc8703a,
+    },
+    fog: { color: 0xcfdcea, near: 110, far: 300 },
+    sun: { color: 0xfff1da, intensity: 2.0, night: 0.1 },
+    // Cool sky fill so shadows run slightly blue; at night a moonlit blue-grey carries the whitewash.
+    ambient: {
+      sky: 0x9ec0e8,
+      ground: 0x9a8566,
+      intensity: 0.55,
+      night: { sky: 0x9aaedc, ground: 0x4a5080, intensity: 0.95 },
+      fillNight: 0.9,
+    },
+    atmosphere: 0.5,
     craters: 0,
     roughness: 0.55,
     shape: 'plain',
     scatter: 'medina',
-    companion: { name: 'Moon', color: 0xf3ead4, size: 2.4, glow: 0xffe9c0 },
+    companion: { name: 'Moon', color: 0xf3ead4, size: 2.4, glow: 0xffe9c0, crescent: true },
     dust: 0.3,
     weather: [{ kind: 'pollen', rate: 0.15 }],
     clouds: { amount: 0.08, color: 0xffffff, speed: 0.8 },
-    // souk fauna: cat, pigeon (wired later)
+    // Street life (streetlife.js): cats and pigeons keep to the alleys, swallows fly over.
     fauna: {
+      cats: { count: 5 },
+      pigeons: { count: 8 },
       birds: { kind: 'swallow', count: 4, altitude: [8, 15], colors: [0x6a6a72, 0x8a8a92], size: 0.8 },
     },
     audio: {
