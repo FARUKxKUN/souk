@@ -1,11 +1,11 @@
 /**
  * Procedural sound. Every name the registry knows can be made from Web Audio nodes alone,
- * so the colony is fully audible with not one audio file in the repository — and when a real
+ * so the colony is fully audible with not one audio file in the repository, and when a real
  * sample does turn up in the manifest, it slots into exactly the same `Voice` shape, so the
  * mixer never has to know which it got.
  *
  * Two rules keep this honest for an always-open window. Nothing here allocates on a frame
- * unless it is actually making a new sound — a bed sitting idle is a buffer source, a filter
+ * unless it is actually making a new sound, a bed sitting idle is a buffer source, a filter
  * and a gain, and its `update` is a few multiplies. And nothing ever changes a gain by
  * assignment: every level goes through `setTargetAtTime` or a ramp, because a stepped gain is
  * a click, and one click is enough to get the whole layer muted for good.
@@ -80,7 +80,7 @@ export function createNoiseBuffers(ctx) {
 
 /**
  * A sound that is currently playing. Owns its own output gain so whoever started it can fade
- * it out and drop it without knowing what is behind it — three oscillators or one sample.
+ * it out and drop it without knowing what is behind it, three oscillators or one sample.
  * `until` is the context time by which a one-shot has finished; loops leave it infinite.
  */
 export class Voice {
@@ -106,7 +106,7 @@ export class Voice {
     return node
   }
 
-  /** Called every frame while alive — LFOs, swells, scheduled taps. Most voices do nothing. */
+  /** Called every frame while alive, LFOs, swells, scheduled taps. Most voices do nothing. */
   update(dt, now) {}
 
   /** The pool's idea of how loud this source is (0..1); a rotor pitches up with it. */
@@ -251,7 +251,7 @@ export function chirp(ctx, dest, when, o) {
 
 /**
  * Noise through a lowpass whose cutoff wanders. The random walk lives in `update`, not in an
- * LFO node, because wind is not periodic — the moment it is, you hear the loop.
+ * LFO node, because wind is not periodic, the moment it is, you hear the loop.
  */
 class WindVoice extends Voice {
   constructor(ctx, dest, noise, o) {
@@ -324,7 +324,7 @@ class SurfVoice extends Voice {
   }
 }
 
-/** Noise with a fast, small flutter — running water, or leaves. */
+/** Noise with a fast, small flutter, running water, or leaves. */
 class FlutterVoice extends Voice {
   constructor(ctx, dest, noise, o) {
     super(ctx, dest)
@@ -551,12 +551,12 @@ class HammerVoice extends Voice {
       const hp = filter(ctx, 'highpass', 2600, 0.8)
       hp.connect(tick)
       burst(ctx, this.noise.white, hp, t, 0.035)
-      envelope(tick.gain, t, this.base * 0.55, 0.002, 0.05)
+      envelope(tick.gain, t, this.base * 0.55, 0.006, 0.05)
       const thud = gain(ctx, 0, this.out)
       const o = osc(ctx, 'sine', 180, thud, t)
       o.frequency.exponentialRampToValueAtTime(110, t + 0.06)
-      o.stop(envelope(thud.gain, t, this.base, 0.003, 0.09) + 0.02)
-      // 2.2 Hz with a little jitter, and a breath every eight or so strikes — a metronome
+      o.stop(envelope(thud.gain, t, this.base, 0.008, 0.1) + 0.02)
+      // 2.2 Hz with a little jitter, and a breath every eight or so strikes, a metronome
       // is the one thing hammering should never sound like.
       this.next = t + 1 / 2.2 + rand(-0.06, 0.06)
       if (++this.taps % 8 === 0) this.next += rand(0.6, 1.6)
@@ -576,7 +576,8 @@ class ShipHumVoice extends Voice {
     this.cutoff = 170
     this.acc = 0
     const now = ctx.currentTime
-    this.filter = this.node(filter(ctx, 'lowpass', this.cutoff, 5))
+    // Q 1.5, not 5: at 5 the cutoff's random walk rang like a buzzing wire.
+    this.filter = this.node(filter(ctx, 'lowpass', this.cutoff, 1.5))
     this.filter.connect(this.out)
     const mix = this.node(gain(ctx, 0.5, this.filter))
     this.source(osc(ctx, 'sawtooth', 55, mix, now))
@@ -692,6 +693,19 @@ const BIRDS = {
     chirp(ctx, dest, now, { f0: 390, f1: 340, dur: 0.32, gain: level * 0.6, attack: 0.06, decay: 0.15 })
     chirp(ctx, dest, now + 0.55, { f0: 380, f1: 320, dur: 0.55, gain: level * 0.6, attack: 0.08, decay: 0.25 })
     return now + 1.6
+  },
+  /**
+   * Swallows over the rooftops: a quick, quiet twitter. The flock calls every 6 to 15 seconds,
+   * and it was the songbird's loud 3 to 6 note run; now it is two or three soft notes.
+   */
+  swallow(ctx, dest, now, level) {
+    let t = now
+    const n = 2 + ((Math.random() * 3) | 0)
+    for (let i = 0; i < n; i++) {
+      chirp(ctx, dest, t, { f0: rand(3000, 3800), f1: rand(2600, 3300), dur: 0.05, gain: level * 0.1, attack: 0.02, decay: 0.04 })
+      t += rand(0.08, 0.13)
+    }
+    return t + 0.15
   },
 }
 
@@ -877,7 +891,7 @@ export const GENERATORS = {
   'drone-drop': oneShot(ONE_SHOTS.droneDrop),
 
   // Positional loops
-  'work-hammer': (ctx, d, o, n) => new HammerVoice(ctx, d, n, { base: 0.5 }),
+  'work-hammer': (ctx, d, o, n) => new HammerVoice(ctx, d, n, { base: 0.22 }),
   'ship-hum': (ctx, d, o, n) => new ShipHumVoice(ctx, d, n, { base: 0.2 }),
   'drone-whine': (ctx, d, o, n) => new DroneVoice(ctx, d, n, { base: 0.22 }),
   'shore-lap': (ctx, d, o, n) => new ShoreVoice(ctx, d, n, { base: 0.4 }),

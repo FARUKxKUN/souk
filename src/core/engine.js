@@ -210,7 +210,8 @@ export class Engine {
 
     // A high threshold is what keeps this an accent rather than a haze: only the eyes,
     // lamps, sparks and the sun's disc clear it, so lit surfaces stay crisp.
-    this.bloomPass = new LiteBloomPass(new THREE.Vector2(1, 1), this.settings.get('bloomStrength'), 0.55, 0.92)
+    // The chain's size is fixed when the composer is built, so a change to `bloomRes` lands on reload.
+    this.bloomPass = new LiteBloomPass(new THREE.Vector2(1, 1), this.settings.get('bloomStrength'), 0.55, 0.92, { half: this.settings.get('bloomRes') === 'half' })
     composer.addPass(this.bloomPass)
 
     // After bloom, so an out-of-focus lamp keeps its glow and the glow goes soft with it
@@ -263,6 +264,21 @@ export class Engine {
   _wantsPost() {
     const s = this.settings
     return Boolean(s.get('bloom') || s.get('antialias') || s.get('tiltShift') || s.get('colorGrade') || s.get('ambientOcclusion') > 0)
+  }
+
+  /**
+   * Compile the shader programs of objects that stay hidden until somebody interacts (the
+   * selection and hover rings). Three compiles only what is visible when it is asked, so without
+   * this the first click on an artisan waited on a driver compile in the middle of a frame.
+   */
+  precompile(objects) {
+    const shown = objects.map((o) => [o, o.visible])
+    for (const [o] of shown) o.visible = true
+    try {
+      this.renderer.compile(this.scene, this.camera)
+    } finally {
+      for (const [o, visible] of shown) o.visible = visible
+    }
   }
 
   /** A planet's own colour character — Mars a little warm, Frost a little cool. */

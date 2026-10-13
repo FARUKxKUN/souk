@@ -25,11 +25,19 @@ const HIGH_PASS_TAPS = /* glsl */ `
 `
 
 export class LiteBloomPass extends UnrealBloomPass {
-  constructor(resolution, strength, radius, threshold) {
+  /**
+   * `half` starts the chain at half the frame, which is three's stock size: the glow is a little
+   * crisper and costs roughly three times the quarter chain. Used by the High preset, where the
+   * GPU has the time. The quarter chain stays the default for everything else.
+   */
+  constructor(resolution, strength, radius, threshold, { half = false } = {}) {
     // The parent sizes its chain at half of what it is told, so telling it half gives a quarter.
-    super(new Vector2(resolution.x / 2, resolution.y / 2), strength, radius, threshold)
+    const told = half ? 1 : 0.5
+    super(new Vector2(resolution.x * told, resolution.y * told), strength, radius, threshold)
+    this.half = half
     const material = this.materialHighPassFilter
     material.uniforms.uTexel = this.highPassUniforms.uTexel = { value: new Vector2(1 / resolution.x, 1 / resolution.y) }
+    if (half) return
     material.fragmentShader = material.fragmentShader
       .replace('varying vec2 vUv;', `varying vec2 vUv;\n${HIGH_PASS_TAPS}`)
       .replace(
@@ -42,7 +50,8 @@ export class LiteBloomPass extends UnrealBloomPass {
   }
 
   setSize(width, height) {
-    super.setSize(width / 2, height / 2)
+    const told = this.half ? 1 : 0.5
+    super.setSize(width * told, height * told)
     this.highPassUniforms.uTexel.value.set(1 / Math.max(1, width), 1 / Math.max(1, height))
   }
 }

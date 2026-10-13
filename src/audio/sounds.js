@@ -11,19 +11,19 @@ const GENERATORS = { ...BASE_GENERATORS, ...SOUK_GENERATORS }
  * name, the integrator tags sources by name, `play` takes a name. Behind each one sits a
  * synth from `synth.js`, and optionally a real file from the manifest that overrides it. So
  * a sample can be dropped in or pulled out without touching any code that asks for sounds,
- * and the registry refuses to load at all if a name has no synth — there is no such thing
+ * and the registry refuses to load at all if a name has no synth, there is no such thing
  * here as a sound that might be silent.
  *
  * `kind` decides how the engine treats it:
- *   bed    — loops forever as a planet's ambience layer
- *   event  — plays once and cleans itself up
- *   loop   — loops while a positional source exists (a site, the ship, a drone, a shore)
+ *   bed   , loops forever as a planet's ambience layer
+ *   event , plays once and cleans itself up
+ *   loop  , loops while a positional source exists (a site, the ship, a drone, a shore)
  * `gain` is a final trim on top of the synth's own level, so the mix can be balanced in
  * one place without touching the recipes.
  */
 
 const TABLE = {
-  // Beds — a planet stacks two or three of these.
+  // Beds, a planet stacks two or three of these.
   /** The souk: a market at a distance, and a courtyard fountain. */
   'souk-crowd': { kind: 'bed', gain: 1 },
   'fountain': { kind: 'bed', gain: 1 },
@@ -46,11 +46,11 @@ const TABLE = {
   'cherry-breeze': { kind: 'bed', gain: 1 },
   /** Airless worlds: the inside of a helmet rather than wind. Nearly inaudible on purpose. */
   'lunar-silence': { kind: 'bed', gain: 1 },
-  /** Thin, high and dusty — a tenth of an atmosphere does not carry a low rumble. */
+  /** Thin, high and dusty, a tenth of an atmosphere does not carry a low rumble. */
   'mars-wind': { kind: 'bed', gain: 1 },
   'stream': { kind: 'bed', gain: 1 },
 
-  // One-shots — environment events, and the handful of sounds the colony itself makes.
+  // One-shots, environment events, and the handful of sounds the colony itself makes.
   'gull': { kind: 'event', gain: 0.8 },
   'parrot': { kind: 'event', gain: 0.8 },
   'crow': { kind: 'event', gain: 0.8 },
@@ -67,7 +67,7 @@ const TABLE = {
   'coyote': { kind: 'event', gain: 0.6 },
   /** Whatever bird the planet has: pass `kind` (gull | parrot | crow | songbird | owl). */
   'bird-call': { kind: 'event', gain: 0.8 },
-  /** A soft servo click and a thud — something small just landed. */
+  /** A soft servo click and a thud, something small just landed. */
   'drone-drop': { kind: 'event', gain: 0.7 },
   /** The souk's small life: a pigeon's coo, a cat's mew, a cart on the cobbles, copperwork far off. */
   'pigeon': { kind: 'event', gain: 0.6 },
@@ -75,7 +75,7 @@ const TABLE = {
   'cart-wheels': { kind: 'event', gain: 0.7 },
   'copper-tink': { kind: 'event', gain: 0.6 },
   /**
-   * "Yes?" — what an astronaut says when you click it. Six of them, picked at random, so a
+   * "Yes?", what an astronaut says when you click it. Six of them, picked at random, so a
    * crowd does not answer in one voice. Little robot phrases: two or three chirps.
    */
   'select-1': { kind: 'event', gain: 0.55 },
@@ -90,7 +90,7 @@ const TABLE = {
    */
   'chime-attention': { kind: 'event', gain: 0.6 },
 
-  // Positional loops — attached to things in the world, heard from where they are.
+  // Positional loops, attached to things in the world, heard from where they are.
   'work-hammer': { kind: 'loop', gain: 1 },
   'ship-hum': { kind: 'loop', gain: 1 },
   'drone-whine': { kind: 'loop', gain: 1 },

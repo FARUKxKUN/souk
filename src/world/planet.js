@@ -89,14 +89,17 @@ export const PLANETS = {
     audio: {
       beds: [
         { sound: 'souk-crowd', gain: 0.6 },
-        { sound: 'fountain', gain: 1 },
+        { sound: 'fountain', gain: 1.5 },
       ],
       events: [
-        { sound: 'pigeon', every: [20, 60], gain: 1, when: 'day', where: 'ring' },
-        { sound: 'cart-wheels', every: [45, 120], gain: 1, when: 'day', where: 'ring' },
-        { sound: 'copper-tink', every: [40, 120], gain: 1, where: 'ring' },
+        { sound: 'pigeon', every: [45, 120], gain: 1, when: 'day', where: 'ring' },
+        { sound: 'cart-wheels', every: [90, 240], gain: 0.9, when: 'day', where: 'ring' },
+        { sound: 'copper-tink', every: [120, 300], gain: 0.8, where: 'ring' },
         { sound: 'cat-mew', every: [90, 240], gain: 0.8, when: 'night', where: 'ring' },
       ],
+      // The souk has no swallows calling over the rooftops and no ship humming at its gate.
+      calls: false,
+      shipHum: false,
     },
     grade: { saturation: 1.06, warmth: 0.25 },
   },

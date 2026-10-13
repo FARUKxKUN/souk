@@ -1,3 +1,4 @@
+import { TIER_PRESET } from './gpu-tier.js'
 /**
  * Every knob that costs frames, in one place.
  *
@@ -41,6 +42,7 @@ export const PRESETS = {
       fauna: 'low',
       maxPixelRatio: 1,
       reflections: false,
+      bloomRes: 'quarter',
     },
   },
   low: {
@@ -65,6 +67,7 @@ export const PRESETS = {
       fauna: 'low',
       maxPixelRatio: 1,
       reflections: false,
+      bloomRes: 'quarter',
     },
   },
   balanced: {
@@ -89,6 +92,7 @@ export const PRESETS = {
       fauna: 'full',
       maxPixelRatio: 1.25,
       reflections: false,
+      bloomRes: 'quarter',
     },
   },
   high: {
@@ -111,8 +115,9 @@ export const PRESETS = {
       ambientOcclusion: 0.25,
       clouds: true,
       fauna: 'full',
-      maxPixelRatio: 1.5,
+      maxPixelRatio: 1.75,
       reflections: true,
+      bloomRes: 'half',
     },
   },
   ultra: {
@@ -137,6 +142,7 @@ export const PRESETS = {
       fauna: 'full',
       maxPixelRatio: 2,
       reflections: true,
+      bloomRes: 'half',
     },
   },
 }
@@ -190,10 +196,10 @@ const DEFAULTS = {
   saturation: 1.0,
   vignette: 0.3,
 
-  // Sound. On by default but silent until the first click — browsers insist — and every
-  // layer has its own fader, because the one thing an always-open window must never do is
-  // make a noise you cannot turn down.
-  sound: true,
+  // Sound. Off until someone turns it on (a saved choice always wins), and every layer has its
+  // own fader, because the one thing an always-open window must never do is make a noise you
+  // cannot turn down.
+  sound: false,
   masterVolume: 0.6,
   ambienceVolume: 0.8,
   effectsVolume: 0.8,
@@ -222,6 +228,7 @@ const RENDER_KEYS = new Set([
   'renderScale',
   'shadows',
   'bloom',
+  'bloomRes',
   'antialias',
   'exposure',
   'bloomStrength',
@@ -253,10 +260,34 @@ export class Settings {
     }
     this.listeners = new Set()
     this._saveTimer = 0
+    this.gpu = { name: '', tier: 'unknown' }
   }
 
   get(key) {
     return this.values[key]
+  }
+
+  /**
+   * The GPU the browser renders on, and the tier it was read as. Read once at boot. The tier's
+   * preset becomes the starting point for anybody who has never picked one by hand, once, and
+   * the `tierDefaulted` flag keeps it from ever being applied again.
+   */
+  setGpu(name, tier) {
+    this.gpu = { name, tier }
+    if (this.values.tierDefaulted) return
+    this.values.tierDefaulted = true
+    // Only an install still on the stock preset, with no hand-picked preset, moves. A chosen
+    // preset, or any knob touched by hand (which makes the preset 'custom'), stays as it is.
+    if (!this.values.presetPicked && this.values.preset === 'balanced') {
+      this.applyDefaultPreset(TIER_PRESET[tier] || 'balanced')
+    } else {
+      this._scheduleSave()
+    }
+  }
+
+  /** The preset a person would see on this machine if they had never touched it. */
+  applyDefaultPreset(name) {
+    this._applyPreset(name)
   }
 
   /** True when `key` currently differs from what the active preset specifies. */
@@ -274,7 +305,14 @@ export class Settings {
     this._emit([key])
   }
 
+  /** A preset picked by a person, from the HUD. Records that, so no default ever overrides it. */
   applyPreset(name) {
+    if (!PRESETS[name]) return
+    this.values.presetPicked = true
+    this._applyPreset(name)
+  }
+
+  _applyPreset(name) {
     const preset = PRESETS[name]
     if (!preset) return
     const changed = []
@@ -352,7 +390,7 @@ export class Settings {
  * Keys added to the presets after installs already exist. A saved set that predates one takes
  * the value of the preset it is on, so a Low install does not quietly inherit Balanced's.
  */
-const PRESET_ADDED_KEYS = ['maxPixelRatio', 'reflections']
+const PRESET_ADDED_KEYS = ['maxPixelRatio', 'reflections', 'bloomRes']
 /** What Balanced used to ask for, per key that was re-tuned. Untouched means "never moved by hand". */
 const RETUNED_BALANCED = { ambientOcclusion: 0.25, renderScale: 1 }
 

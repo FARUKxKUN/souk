@@ -2,6 +2,8 @@ import * as THREE from 'three'
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 import { atlasTexture, hasPart, kitReady, part } from './kit.js'
 import { mulberry } from './planet.js'
+import { buildingUniforms } from './buildings.js'
+import { withCurve } from '../core/curve.js'
 
 /**
  * The rest of the medina: whitewashed houses packed between the workshops and the rampart.
@@ -35,6 +37,10 @@ const BLOCKS = [
   { name: 'block_l', w: 2.0, h: 2.5, d: 2.0, weight: 30 },
 ]
 const NEEDED = ['block_s', 'block_m', 'block_l', 'door_arch', 'window', 'dome_small', 'dome']
+/** The warm glass a window gives off once the sun is down, in linear light. */
+const WINDOW_GLOW = [1.0, 0.66, 0.36]
+/** How far a house's whitewash strays from the shared swatch: a few percent, never a second colour. */
+const TINT_SPREAD = 0.05
 /** A bucket of this size makes `blocked` a handful of comparisons. */
 const BUCKET = 8
 
@@ -54,29 +60,103 @@ function pickBlock(rand) {
   return BLOCKS[1]
 }
 
+/**
+ * Every vertex of a piece carries its house's whitewash tint, and window pieces carry a flag so
+ * the shader can light them after dark. Every piece gets both attributes, because the merge
+ * needs one attribute set across the whole fill.
+ */
+function markPiece(geo, tint, lit) {
+  const n = geo.attributes.position.count
+  const colour = new Float32Array(n * 3)
+  for (let i = 0; i < n; i++) {
+    colour[i * 3] = tint[0]
+    colour[i * 3 + 1] = tint[1]
+    colour[i * 3 + 2] = tint[2]
+  }
+  geo.setAttribute('aTint', new THREE.BufferAttribute(colour, 3))
+  geo.setAttribute('aWindow', new THREE.BufferAttribute(new Float32Array(n).fill(lit ? 1 : 0), 1))
+  return geo
+}
+
 /** One kit piece, placed in the house's frame and then carried into the world by `house`. */
-function piece(list, name, house, x, y, z, yaw = 0) {
+function piece(list, name, house, tint, x, y, z, yaw = 0, lit = false) {
   const geo = part(name, 'medina')
   _q.setFromAxisAngle(_up, yaw)
   _local.compose(_p.set(x, y, z), _q, _s.set(1, 1, 1))
   geo.applyMatrix4(_m.copy(house).multiply(_local))
-  list.push(geo)
+  list.push(markPiece(geo, tint, lit))
 }
 
-function furnish(list, block, house, rand) {
+function furnish(list, block, house, rand, tint) {
   const { name, w, h, d } = block
-  piece(list, name, house, 0, 0, 0)
+  piece(list, name, house, tint, 0, 0, 0)
   // The door faces +z, which the house has been turned to point at the nearest alley.
-  if (rand() < 0.6) piece(list, 'door_arch', house, 0, 0, d / 2)
+  if (rand() < 0.6) piece(list, 'door_arch', house, tint, 0, 0, d / 2)
   if (block.h > 1.2) {
-    piece(list, 'window', house, w * 0.3 * (rand() < 0.5 ? -1 : 1), h * 0.55, d / 2)
-    piece(list, 'window', house, d / 2, h * 0.55, 0.2, Math.PI / 2)
+    piece(list, 'window', house, tint, w * 0.3 * (rand() < 0.5 ? -1 : 1), h * 0.55, d / 2, 0, true)
+    piece(list, 'window', house, tint, d / 2, h * 0.55, 0.2, Math.PI / 2, true)
   } else {
-    piece(list, 'window', house, d / 2, h * 0.5, 0, Math.PI / 2)
+    piece(list, 'window', house, tint, d / 2, h * 0.5, 0, Math.PI / 2, true)
   }
   const roll = rand()
-  if (block.h < 2 && roll < 0.28) piece(list, 'dome_small', house, 0, h + 0.1, 0)
-  else if (block.h > 2 && roll < 0.14) piece(list, 'dome', house, 0, h + 0.1, 0)
+  if (block.h < 2 && roll < 0.28) piece(list, 'dome_small', house, tint, 0, h + 0.1, 0)
+  else if (block.h > 2 && roll < 0.14) piece(list, 'dome', house, tint, 0, h + 0.1, 0)
+}
+
+/**
+ * A small, stable tint per lattice point. A hash rather than the seeded stream, so the layout
+ * (which consumes that stream) is unchanged by the tint, and a house keeps its colour as the
+ * colony grows around it.
+ */
+function houseTint(ix, iz) {
+  const wobble = (salt) => {
+    const f = Math.sin(ix * 12.9898 + iz * 78.233 + salt * 37.719) * 43758.5453
+    return (f - Math.floor(f)) * 2 - 1
+  }
+  const base = 1 + wobble(1) * TINT_SPREAD
+  const warm = wobble(2) * TINT_SPREAD * 0.6
+  return [base + warm, base, base - warm]
+}
+
+/**
+ * The fill's material: the kit's atlas, lit like the workshops, with a per-house tint and warm
+ * window glass that comes on with the night. One material, one draw call.
+ */
+function fillMaterial() {
+  const material = new THREE.MeshStandardMaterial({ map: atlasTexture('medina'), roughness: 0.85, metalness: 0 })
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uNight = buildingUniforms.uNight
+    withCurve(shader)
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+         attribute vec3 aTint;
+         attribute float aWindow;
+         varying vec3 vTint;
+         varying float vWindow;`
+      )
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+ vTint = aTint;
+ vWindow = aWindow;`)
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+         uniform float uNight;
+         varying vec3 vTint;
+         varying float vWindow;`
+      )
+      .replace('#include <color_fragment>', `#include <color_fragment>
+ diffuseColor.rgb *= vTint;`)
+      .replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+         // Only the window glass emits, and only once the sun has gone.
+         totalEmissiveRadiance += vec3( ${WINDOW_GLOW.join(', ')} ) * vWindow * uNight * 1.4;`
+      )
+  }
+  return material
 }
 
 /**
@@ -128,7 +208,7 @@ export function createMedinaFill({ cells, radius, heightAt, seed = 9011 }) {
       const yaw = Math.round(toward / (Math.PI / 2)) * (Math.PI / 2)
       _q.setFromAxisAngle(_up, yaw)
       _m.compose(_p.set(x, heightAt(x, z) - 0.05, z), _q, _s.set(scale, scale, scale))
-      furnish(geos, block, _m.clone(), rand)
+      furnish(geos, block, _m.clone(), rand, houseTint(ix, iz))
       spots.push({ x, z, r: Math.max(block.w, block.d) * scale * 0.75 })
     }
   }
@@ -139,7 +219,7 @@ export function createMedinaFill({ cells, radius, heightAt, seed = 9011 }) {
   if (geos.length) {
     const merged = BufferGeometryUtils.mergeGeometries(geos, false)
     geos.forEach((g) => g.dispose())
-    const material = new THREE.MeshStandardMaterial({ map: atlasTexture('medina'), roughness: 0.85, metalness: 0 })
+    const material = fillMaterial()
     const mesh = new THREE.Mesh(merged, material)
     mesh.name = 'houses'
     // No shadow casting: a hundred and fifty small casters would be the priciest part of the

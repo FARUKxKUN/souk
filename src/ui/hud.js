@@ -2,7 +2,7 @@ import { PRESETS, PLANETS_ORDER } from './hud-data.js'
 import { PLANETS } from '../world/planet.js'
 import { TIMES, systemTimeOfDay } from '../world/sky.js'
 import { STATUS_LABEL } from '../game/colony.js'
-import { FACE, FRAME_COLS, FRAME_ROWS } from '../agents/faces.js'
+import { createCardFace, paintCardFace } from './card-face.js'
 import { PLOT_PALETTE, hashString } from '../world/plots.js'
 
 /**
@@ -108,18 +108,21 @@ export class Hud {
     const s = this.settings
     this.controls = []
 
-    // Quality presets.
-    body.appendChild(
-      group(
-        'Quality preset',
-        chips(
-          Object.entries(PRESETS).map(([id, p]) => ({ id, label: p.label, title: p.hint })),
-          () => s.get('preset'),
-          (id) => s.applyPreset(id),
-          this.controls
-        )
+    // Quality presets, and the GPU they were chosen against, so a starting preset is explained.
+    const quality = group(
+      'Quality preset',
+      chips(
+        Object.entries(PRESETS).map(([id, p]) => ({ id, label: p.label, title: p.hint })),
+        () => s.get('preset'),
+        (id) => s.applyPreset(id),
+        this.controls
       )
     )
+    const gpu = document.createElement('p')
+    gpu.className = 'gpu-note'
+    gpu.textContent = gpuNoteText(s.gpu)
+    quality.appendChild(gpu)
+    body.appendChild(quality)
 
     // Performance.
     const perf = group('Performance')
@@ -408,15 +411,7 @@ export class Hud {
 
   /** The little face on the agent card, drawn from the same atlas the astronauts use. */
   _buildAvatar() {
-    const canvas = this.$('.thread-pop .avatar canvas')
-    canvas.width = 108
-    canvas.height = 108
-    this.avatarCtx = canvas.getContext('2d')
-    this.avatarTmp = document.createElement('canvas')
-    this.avatarTmp.width = 108
-    this.avatarTmp.height = 108
-    this.avatarTmpCtx = this.avatarTmp.getContext('2d')
-    this._avatarState = { frame: -1, color: '' }
+    this.face = createCardFace(this.$('.thread-pop .avatar canvas'))
   }
 
   _wire() {
@@ -486,7 +481,10 @@ export class Hud {
     const btn = this.$('#btn-sound')
     btn.innerHTML = sound ? ICON.sound : ICON.soundOff
     btn.setAttribute('aria-pressed', String(sound))
-    btn.title = sound ? 'Mute (M)' : 'Unmute (M)'
+    // Muted is shown by more than the icon: a dimmed, outlined button and a label that says so.
+    btn.classList.toggle('is-muted', !sound)
+    btn.title = sound ? 'Sound on - click to mute (M)' : 'Sound off - click to turn it on (M)'
+    btn.setAttribute('aria-label', btn.title)
   }
 
   setStats(stats) {
@@ -815,41 +813,8 @@ export class Hud {
   }
 
   /** Redraw the card's face so it blinks in step with the astronaut it belongs to. */
-  updateAvatar(faceAtlasCanvas) {
-    if (!this.selected || !faceAtlasCanvas) return
-    const agent = this.selected.agent
-    const frame = agent.faceFrame ?? FACE.idle
-    const color = agent.eye
-    const css = cssFromGlow(color)
-    if (this._avatarState.frame === frame && this._avatarState.color === css) return
-    this._avatarState = { frame, color: css }
-
-    const size = 108
-    const cell = faceAtlasCanvas.width / FRAME_COLS
-    const sx = (frame % FRAME_COLS) * cell
-    const sy = Math.floor(frame / FRAME_COLS) * (faceAtlasCanvas.height / FRAME_ROWS)
-
-    // The atlas is an opaque white-on-black mask, so the tint is a `multiply`, not a
-    // `source-in`: black stays black and the white features take the eye colour. Keying on
-    // alpha instead would flood the whole cell, because every pixel in it is opaque.
-    const t = this.avatarTmpCtx
-    t.globalCompositeOperation = 'source-over'
-    t.clearRect(0, 0, size, size)
-    t.drawImage(faceAtlasCanvas, sx, sy, cell, cell, 0, 0, size, size)
-    t.globalCompositeOperation = 'multiply'
-    t.fillStyle = css
-    t.fillRect(0, 0, size, size)
-    t.globalCompositeOperation = 'source-over'
-
-    const c = this.avatarCtx
-    c.fillStyle = '#06070c'
-    c.fillRect(0, 0, size, size)
-    c.drawImage(this.avatarTmp, 0, 0)
-    // Scanlines, so the card's face reads as the same little screen as the one in the world.
-    c.globalAlpha = 0.2
-    c.fillStyle = '#000'
-    for (let y = 0; y < size; y += 3) c.fillRect(0, y, size, 1)
-    c.globalAlpha = 1
+  updateAvatar() {
+    if (this.selected) paintCardFace(this.face, this.selected.agent)
   }
 
   setFps(perf, viewport, extra) {
@@ -953,6 +918,16 @@ export class Hud {
 
 // ── helpers ───────────────────────────────────────────────────────────────────────────
 
+/** One unobtrusive line: which GPU the renderer found and what that means for the starting preset. */
+function gpuNoteText(gpu) {
+  if (!gpu?.name) return 'GPU not reported by this browser'
+  const label = gpu.tier === 'discrete' ? 'discrete' : gpu.tier === 'integrated' ? 'integrated' : 'unrecognised'
+  // ANGLE reports "ANGLE (vendor, model (0x...) Direct3D11 ..., D3D11)"; the model is the part to show.
+  const inner = gpu.name.replace(/^ANGLE \(|\)$/g, '')
+  const model = (inner.split(',')[1] ?? inner).replace(/\s*\(0x[0-9a-f]+\).*$/i, '').trim()
+  return `GPU: ${model || gpu.name} (${label})`
+}
+
 function group(title, child) {
   const el = document.createElement('div')
   el.className = 'group'
@@ -986,17 +961,6 @@ function chips(items, current, onPick, registry) {
 }
 
 const hex = (n) => '#' + (n >>> 0).toString(16).padStart(6, '0').slice(-6)
-/**
- * Eye colours are authored above 1.0 so the bloom pass catches them in the scene. For the
- * card they are normalised by the brightest channel — which keeps the hue the astronaut
- * actually has rather than clipping a 3.0-red down to the same white as a 3.0-blue.
- */
-function cssFromGlow(color) {
-  const peak = Math.max(color.r, color.g, color.b, 1)
-  const enc = (v) => Math.round(Math.pow(Math.min(1, v / peak), 1 / 2.2) * 255)
-  return `rgb(${enc(color.r)},${enc(color.g)},${enc(color.b)})`
-}
-
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
 }

@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import './ui/styles.css'
-import { DEFAULT_PRESET, Settings, hasStoredSettings } from './core/settings.js'
+import { Settings, hasStoredSettings } from './core/settings.js'
+import { gpuTierFor, readGpuRenderer } from './core/gpu-tier.js'
 import { Engine } from './core/engine.js'
 import { CameraRig } from './core/camera.js'
 import { Colony, STATUS_LABEL, STATUS_ORDER, statusFor, transcriptProgress } from './game/colony.js'
@@ -52,7 +53,11 @@ const settings = new Settings()
 // and shadows is more than its GPU wants to do at sixty, and the governor only ever finds
 // that out by stuttering first.
 const phoneLike = window.matchMedia('(max-width: 600px)').matches || (window.matchMedia('(pointer: coarse)').matches && window.innerWidth < 900)
-if (!hasStoredSettings()) settings.applyPreset(phoneLike ? 'low' : DEFAULT_PRESET)
+if (!hasStoredSettings() && phoneLike) settings.applyDefaultPreset('low')
+// The GPU decides the starting preset for anybody who has not picked one: a discrete card
+// starts on High, integrated graphics on Balanced. Read once, from a throwaway context.
+const gpuName = readGpuRenderer()
+settings.setGpu(gpuName, gpuTierFor(gpuName))
 
 // Before the first material compiles: the bend is patched into three's own shader chunks.
 installWorldCurve()
@@ -303,7 +308,11 @@ const actions = {
  */
 const ambience = new Ambience(settings)
 ambience.setPlanet(colony.planet)
-colony.onSound = (name, x, y, z) => ambience.play(name, { x, y, z, kind: colony.fauna.flock?.kind })
+colony.onSound = (name, x, y, z) => {
+  // A planet can keep its flocks silent (the medina has no swallow calls).
+  if (name === 'bird-call' && colony.planet.audio?.calls === false) return
+  ambience.play(name, { x, y, z, kind: colony.fauna.flock?.kind })
+}
 
 const hud = new Hud(app, settings, actions)
 
@@ -1058,6 +1067,8 @@ async function boot() {
   }
   colony.astronauts.setRig(crewRig())
   if (!kitError) colony.onAssetsReady()
+  // The selection and hover rings start hidden; their programs are built now, not on first click.
+  engine.precompile([colony.astronauts.selectRing, colony.astronauts.hoverRing])
 
   await poll()
   setInterval(poll, POLL_MS)
@@ -1112,7 +1123,7 @@ engine.add({
     engine.setFocusDistance(rig.distance)
 
     if (selectedId) {
-      hud.updateAvatar(colony.astronauts.faceTexture.image)
+      hud.updateAvatar()
       // A selected astronaut that walked off the roster should not keep a stale card open.
       const agent = colony.agentFor(selectedId)
       if (!agent) select(null, {})
@@ -1149,7 +1160,7 @@ function soundWorld() {
       take(`work:${agent.id}`, 'work-hammer', agent.pos.x, agent.pos.y + 0.6, agent.pos.z, 0.9)
     }
   }
-  take('ship', 'ship-hum', shipSpot.x, colony.ship.group.position.y + 3, shipSpot.z, 0.7)
+  if (colony.planet.audio?.shipHum !== false) take('ship', 'ship-hum', shipSpot.x, colony.ship.group.position.y + 3, shipSpot.z, 0.7)
   colony.fauna.drones.forEach((d, i) => take(`drone:${i}`, 'drone-whine', d.x, d.y, d.z, d.busy ? 1 : 0.35))
   soundSources.length = n
 

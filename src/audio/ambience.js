@@ -6,10 +6,10 @@ import { createNoiseBuffers, SampleVoice } from './synth.js'
  *
  * Three things are going on at once, kept deliberately independent of each other:
  *
- * 1. **Beds.** A planet names a few looping layers — wind, surf, insects. They cross-fade
+ * 1. **Beds.** A planet names a few looping layers (wind, surf, insects). They cross-fade
  *    equal-power over three seconds when the world changes, and each blends between a day
  *    and a night level as the sun goes down.
- * 2. **Environment events.** One-shots on their own random timers — a gull, a distant
+ * 2. **Environment events.** One-shots on their own random timers, a gull, a distant
  *    rumble, an owl once it is dark. Nothing here is synchronised to anything else, which is
  *    what stops it turning into a pattern the ear learns.
  * 3. **Positional sources.** Things in the world make sound where they are. The camera is
@@ -18,12 +18,12 @@ import { createNoiseBuffers, SampleVoice } from './synth.js'
  *    nearest few are voiced at once; the rest fade in and out as the view moves.
  *
  * Everything routes master → { ambience bus, effects bus } → a gentle compressor → out, so
- * three events landing together cannot clip, and every level change is a ramp — an
+ * three events landing together cannot clip, and every level change is a ramp: an
  * always-open window will be muted forever after one click.
  *
  * Nothing audible happens before `unlock()`, which the browser's autoplay policy demands
  * anyway; this class hangs its own gesture listener on the document so the integrator can
- * forget about it. Without `AudioContext` at all — a test, a server render — every method
+ * forget about it. Without `AudioContext` at all (a test, a server render), every method
  * is a no-op rather than a throw.
  */
 
@@ -34,7 +34,11 @@ const MANIFEST_PATH = 'audio/manifest.json'
 export const MAX_VOICES = 10
 /** Planet cross-fade, seconds. */
 const BED_FADE = 3
-/** Time constant of a positional fade — settles in about 0.4 s. */
+/** A bed that starts with no cross-fade to hide it still rises from silence over this long. */
+const BED_RISE = 0.8
+/** Every one-shot rises from silence over this long: a sound that starts at full level clicks. */
+const EVENT_RISE = 0.012
+/** Time constant of a positional fade: settles in about 0.4 s. */
 const VOICE_TAU = 0.13
 /** How long a fading-out voice is kept before its nodes are dropped; ~1% by then. */
 const VOICE_STOP_DELAY = 0.6
@@ -96,7 +100,7 @@ export class Ambience {
     this._shoreMix = 1
     /** Last frame's water, so a 'water' event can land on it. */
     this._water = null
-    /** Reused argument objects for event placement — one for positional, one for 2D. */
+    /** Reused argument objects for event placement: one for positional, one for 2D. */
     this._shot = { x: 0, y: 0, z: 0, gain: 1, kind: undefined }
     this._shot2d = { gain: 1, kind: undefined }
     // Listener state, kept so a still camera costs no automation calls at all.
@@ -245,7 +249,7 @@ export class Ambience {
   }
 
   /**
-   * Hear any sound by name for a few seconds, straight to the ear — the sound test panel.
+   * Hear any sound by name for a few seconds, straight to the ear: the sound test panel.
    * A one-shot simply fires; a bed or a loop is faded in, held, and faded out again. The
    * function handed back stops it early.
    */
@@ -554,14 +558,16 @@ export class Ambience {
       this._retiring.push(this._beds)
       this._beds = null
     }
+    // Always rises from silence: a loop that starts at full level, at a random offset, is a click.
+    const span = fade > 0 ? fade : BED_RISE
     const group = {
       mix: ctx.createGain(),
       layers: [],
-      progress: fade > 0 ? 0 : 1,
-      dir: fade > 0 ? 1 : 0,
-      rate: 1 / BED_FADE,
+      progress: 0,
+      dir: 1,
+      rate: 1 / span,
     }
-    group.mix.gain.value = fade > 0 ? 0 : 1
+    group.mix.gain.value = 0
     group.mix.connect(this.ambienceBus)
 
     const night = Math.max(0, this._night)
@@ -739,7 +745,9 @@ export class Ambience {
     const level = ctx.createGain()
     level.connect(dest)
     const voice = this._start(name, level, opts, def.kind !== 'event')
-    level.gain.value = this._baseGain(name, voice) * (opts.gain ?? 1)
+    const target = this._baseGain(name, voice) * (opts.gain ?? 1)
+    level.gain.setValueAtTime(0, now)
+    level.gain.linearRampToValueAtTime(target, now + EVENT_RISE)
     // A loop asked for as a one-shot has no natural end; give it one so it cannot leak.
     if (!Number.isFinite(voice.until)) {
       voice.until = now + 8
