@@ -7,7 +7,7 @@ import { createRequire } from 'node:module'
 import { writeFileSync } from 'node:fs'
 
 const require = createRequire(import.meta.url)
-const PW = process.env.PLAYWRIGHT_PATH || 'C:/Users/batti/.claude/skills/playwright-skill/node_modules/playwright'
+const PW = process.env.PLAYWRIGHT_PATH || 'playwright'
 const { chromium } = require(PW)
 
 const arg = (name, fallback) => {
