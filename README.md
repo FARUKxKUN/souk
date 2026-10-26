@@ -1,15 +1,24 @@
 # Souk
 
+![License MIT](https://img.shields.io/badge/license-MIT-555555?style=flat)
+![Three.js](https://img.shields.io/badge/Three.js-000000?style=flat&logo=threedotjs&logoColor=white)
+![Node 22.13+](https://img.shields.io/badge/node-22.13%2B-5FA04E?style=flat&logo=nodedotjs&logoColor=white)
+![Runs locally](https://img.shields.io/badge/runs-100%25_local-e2643a?style=flat)
+
 Your coding-agent threads, as artisans in a Tunisian medina.
 
 Every agent thread running on your machine (Claude Code, Codex, Cursor, OpenCode and more) becomes an artisan in a red chechia. Every repo becomes a whitewashed workshop with a blue door and a striped awning. Artisans hammer copper while their thread works, stop under a lantern beam when the thread needs your reply, and fall asleep when it has been idle for days. Click an artisan to open its thread.
 
 ![Artisans waiting for a reply under lantern beams](design/souk/polish-waiting-beam.png)
 
-> **Souk is a fork of [Bot Crossing](https://github.com/Station-Sciences/bot-crossing) by [Jarren Rocks](https://jarren.rocks)**, used under the MIT licence.
-> The engine, the harness adapters, the agent rig and animation system, and most of the code in this repository are his work.
-> Souk is a reskin: the medina concept, the setting, the artisans and the Tunisian art direction are mine.
-> Souk is not affiliated with or endorsed by the Bot Crossing project. See [Credits](#credits-and-licence).
+## My role and what is upstream
+
+Souk is my concept and art direction, built on top of an open-source engine by [Jarren Rocks](https://jarren.rocks), used under the MIT licence.
+
+- **Mine:** the medina concept, the setting, the artisans and workshops, the Tunisian art direction, the night lighting and the performance work listed below.
+- **Upstream:** the engine, the harness adapters, the agent rig and animation system, and most of the code. Every upstream commit keeps its original author in the history.
+
+Souk is an independent project, not affiliated with or endorsed by the upstream project. Details in [Credits](#credits-and-licence).
 
 ## What Souk changes
 
